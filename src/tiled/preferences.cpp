@@ -98,6 +98,13 @@ Preferences::~Preferences()
 
 void Preferences::initialize()
 {
+    // Give new profiles a quiet, high-contrast editor palette. Leave existing
+    // profiles (including those using the old default colors) unchanged.
+    if (allKeys().isEmpty()) {
+        setValue(QLatin1String("Interface/BaseColor"), QColor(42, 48, 56).name());
+        setValue(QLatin1String("Interface/SelectionColor"), QColor(55, 124, 116).name());
+    }
+
     // Make sure the data directory exists
     const QDir dataDir { dataLocation() };
     if (!dataDir.exists())

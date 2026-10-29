@@ -53,6 +53,9 @@ void LayerModel::languageChanged()
 
 QModelIndex LayerModel::index(int row, int column, const QModelIndex &parent) const
 {
+    if (!hasIndex(row, column, parent))
+        return QModelIndex();
+
     // Top-level layer index
     if (!parent.isValid()) {
         if (row < map()->layerCount())
@@ -82,6 +85,8 @@ QModelIndex LayerModel::parent(const QModelIndex &index) const
  */
 int LayerModel::rowCount(const QModelIndex &parent) const
 {
+    if (!mMapDocument || parent.column() > 0)
+        return 0;
     if (parent.isValid()) {
         Layer *layer = toLayer(parent);
         Q_ASSERT(layer);

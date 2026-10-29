@@ -3,6 +3,8 @@ Project {
 
     references: [
         "automapping",
+        "layers",
+        "uistyle",
         "mapreader",
         "properties",
         "staggeredrenderer",

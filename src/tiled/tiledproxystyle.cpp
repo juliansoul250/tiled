@@ -267,7 +267,9 @@ static QColor getOutlineColor(const QPalette &pal)
 
 static QColor getLightOutlineColor(const QPalette &pal)
 {
-    return pal.window().color().lighter(140);
+    // A small lightening of a very dark surface leaves unchecked boxes almost
+    // invisible. Derive the edge from the foreground as well as the surface.
+    return mergedColors(pal.windowText().color(), pal.window().color(), 45);
 }
 
 static QColor getHighlightedOutline(const QPalette &pal)
@@ -345,6 +347,53 @@ void TiledProxyStyle::drawPrimitive(PrimitiveElement element,
                                     const QWidget *widget) const
 {
     switch (element) {
+    case PE_PanelButtonTool:
+    {
+        // Keep normal dialog tool buttons visibly raised; only auto-raised
+        // toolbar buttons use the quiet, flat idle state.
+        if (!(option->state & State_AutoRaise)) {
+            QProxyStyle::drawPrimitive(element, option, painter, widget);
+            break;
+        }
+
+        const bool enabled = option->state & State_Enabled;
+        const bool selected = option->state & (State_On | State_Sunken);
+        const bool hovered = enabled && (option->state & State_MouseOver);
+        const bool focused = enabled && (option->state & State_HasFocus);
+        if (!selected && !hovered && !focused)
+            break;
+
+        const QPalette &pal = option->palette;
+        const QColor surface = pal.window().color();
+        const QColor accent = pal.highlight().color();
+        const QColor fill = selected ? mergedColors(accent, surface, 32)
+                                     : mergedColors(pal.windowText().color(), surface, 10);
+        const QColor border = selected || focused ? accent
+                                                 : mergedColors(pal.windowText().color(), surface, 22);
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing);
+        painter->setPen(border);
+        painter->setBrush(fill);
+        const qreal radius = dpiScaled(3.0, option);
+        painter->drawRoundedRect(QRectF(option->rect).adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
+        painter->restore();
+        break;
+    }
+    case PE_IndicatorToolBarSeparator:
+    {
+        const int margin = dpiScaled(6, option);
+        painter->save();
+        painter->setPen(mergedColors(option->palette.windowText().color(),
+                                     option->palette.window().color(), 18));
+        if (option->state & State_Horizontal)
+            painter->drawLine(option->rect.center().x(), option->rect.top() + margin,
+                              option->rect.center().x(), option->rect.bottom() - margin);
+        else
+            painter->drawLine(option->rect.left() + margin, option->rect.center().y(),
+                              option->rect.right() - margin, option->rect.center().y());
+        painter->restore();
+        break;
+    }
     case PE_FrameGroupBox:
     {
         int topMargin = 3;
@@ -449,11 +498,12 @@ void TiledProxyStyle::drawPrimitive(PrimitiveElement element,
 
             QColor boxOutline(mIsDark ? getLightOutlineColor(option->palette) :
                                         getOutlineColor(option->palette));
-            boxOutline.setAlpha(200);
+            boxOutline.setAlpha(mIsDark ? ((state & State_Enabled) ? 255 : 128) : 200);
             painter->setPen(boxOutline);
 
             if (option->state & State_HasFocus && option->state & State_KeyboardFocusChange)
-                painter->setPen(QPen(getHighlightedOutline(option->palette)));
+                painter->setPen(QPen(mIsDark ? option->palette.highlight().color().lighter(150)
+                                             : getHighlightedOutline(option->palette)));
             painter->drawRect(rect);
 
             QColor checkMarkColor = option->palette.text().color().darker(120);
@@ -599,6 +649,12 @@ void TiledProxyStyle::drawPrimitive(PrimitiveElement element,
         const auto radius = roundedRectRadius(dpi(option));
 
         QLinearGradient gradient = qt_fusion_gradient(option->rect, (isEnabled && option->state & State_MouseOver ) ? buttonColor : buttonColor.darker(104));
+        if (mIsDark) {
+            const QColor surface = (isEnabled && option->state & State_MouseOver)
+                    ? buttonColor.lighter(108) : buttonColor;
+            gradient.setColorAt(0, surface.lighter(103));
+            gradient.setColorAt(1, surface);
+        }
         painter->setPen(Qt::transparent);
         painter->setBrush(isDown ? QBrush(downColor) : gradient);
         painter->drawRoundedRect(r, radius, radius);
@@ -876,6 +932,23 @@ void TiledProxyStyle::drawControl(ControlElement element,
 
     case CE_ToolBar:                // A lot of code copied from Fusion style, just to tweak the colors
         if (const QStyleOptionToolBar *toolBar = qstyleoption_cast<const QStyleOptionToolBar *>(option)) {
+            if (mIsDark) {
+                // Flat surfaces keep the map prominent; a single edge still
+                // separates dock actions and adjacent toolbar rows.
+                painter->save();
+                painter->fillRect(rect, option->palette.window());
+                painter->setPen(outline);
+                if (option->state & State_Horizontal) {
+                    const bool dockToolbar = widget && !qobject_cast<const QMainWindow *>(widget->parentWidget());
+                    const int y = dockToolbar ? rect.top() : rect.bottom();
+                    painter->drawLine(rect.left(), y, rect.right(), y);
+                } else {
+                    painter->drawLine(rect.topRight(), rect.bottomRight());
+                }
+                painter->restore();
+                break;
+            }
+
             // Reserve the beveled appearance only for mainwindow toolbars
             if (widget && !(qobject_cast<const QMainWindow*> (widget->parentWidget())))
                 break;
@@ -992,10 +1065,26 @@ void TiledProxyStyle::drawControl(ControlElement element,
         }
         break;
 
-        // Fix the font used to draw dock widget titles (see QDockWidget::paintEvent)
     case CE_DockWidgetTitle:
-        painter->setFont(QFont());
-        QProxyStyle::drawControl(element, option, painter, widget);
+        if (const auto *dock = qstyleoption_cast<const QStyleOptionDockWidget *>(option)) {
+            painter->save();
+            painter->fillRect(rect, option->palette.window().color().lighter(mIsDark ? 110 : 103));
+            painter->setPen(outline);
+            if (dock->verticalTitleBar)
+                painter->drawLine(rect.topRight(), rect.bottomRight());
+            else
+                painter->drawLine(rect.bottomLeft(), rect.bottomRight());
+
+            // QDockWidget supplies a small title font. Use the application
+            // font and matching metrics so bold titles also elide correctly.
+            QFont font = widget ? widget->font() : QApplication::font();
+            font.setWeight(QFont::DemiBold);
+            painter->setFont(font);
+            QStyleOptionDockWidget title(*dock);
+            title.fontMetrics = QFontMetrics(font);
+            QProxyStyle::drawControl(element, &title, painter, widget);
+            painter->restore();
+        }
         break;
 
     case CE_TabBarTabShape:
@@ -1079,18 +1168,6 @@ void TiledProxyStyle::drawControl(ControlElement element,
             if (selected) {
                 fillGradient.setColorAt(0, tabFrameColor.lighter(104));
 
-                // colorful selected tab
-//                QLinearGradient outlineGradient(rect.topLeft(), rect.bottomLeft());
-//                QColor highlight = option->palette.highlight().color();
-//                fillGradient.setColorAt(0, highlight.lighter(130));
-//                outlineGradient.setColorAt(0, highlight.darker(130));
-//                fillGradient.setColorAt(0.10, highlight);
-//                outlineGradient.setColorAt(0.10, highlight.darker(130));
-//                fillGradient.setColorAt(0.1001, tabFrameColor);
-//                outlineGradient.setColorAt(0.1001, highlight.darker(130));
-//                outlineGradient.setColorAt(1, outline);
-//                outlinePen = QPen(outlineGradient, 1);
-
                 fillGradient.setColorAt(1, tabFrameColor);
             } else {
                 fillGradient.setColorAt(0, tabFrameColor);
@@ -1110,7 +1187,11 @@ void TiledProxyStyle::drawControl(ControlElement element,
             painter->restore();
 
             if (selected) {
-                painter->fillRect(rect.left() + 1, rect.bottom() - 1, rect.width() - 2, rect.bottom() - 1, tabFrameColor);
+                // The transform above keeps this accent on the outside edge
+                // for north, south, east and west tabs alike.
+                painter->fillRect(rect.left() + 1, rect.top() + 1, rect.width() - 2,
+                                  dpiScaled(2, option), option->palette.highlight());
+                painter->fillRect(rect.left() + 1, rect.bottom() - 1, rect.width() - 2, 2, tabFrameColor);
                 painter->fillRect(QRect(rect.bottomRight() + QPoint(-2, -1), QSize(1, 1)), innerContrastLine());
                 painter->fillRect(QRect(rect.bottomLeft() + QPoint(0, -1), QSize(1, 1)), innerContrastLine());
                 painter->fillRect(QRect(rect.bottomRight() + QPoint(-1, -1), QSize(1, 1)), innerContrastLine());
@@ -1344,6 +1425,18 @@ int TiledProxyStyle::pixelMetric(QStyle::PixelMetric metric,
         return 0;                   // no space between menu bar items
     case PM_MenuPanelWidth:
         return dpiScaled(2, option);
+    case PM_ToolBarItemSpacing:
+        return dpiScaled(2, option);
+    case PM_ToolBarItemMargin:
+        return dpiScaled(3, option);
+    case PM_ToolBarSeparatorExtent:
+        return dpiScaled(10, option);
+    case PM_DockWidgetTitleMargin:
+        return dpiScaled(6, option);
+    case PM_TabBarTabHSpace:
+        return dpiScaled(24, option);
+    case PM_TabBarTabVSpace:
+        return dpiScaled(12, option);
     case PM_TabBarTabShiftHorizontal:
     case PM_TabBarTabShiftVertical:
         return 0;                   // no shifting of tabs
@@ -1376,9 +1469,14 @@ QSize TiledProxyStyle::sizeFromContents(ContentsType type,
         if (!size.isEmpty())
             size += dpiScaled(QSize(16, 5), option);
         break;
-    case CT_ItemViewItem:           // give item view items a little more space
+    case CT_ItemViewItem:           // comfortable rows without fixed font sizes
         size = QCommonStyle::sizeFromContents(type, option, contentsSize, widget);
-        size += QSize(0, dpiScaled(2, option));
+        size.setHeight(qMax(size.height() + dpiScaled(6, option),
+                            option->fontMetrics.height() + dpiScaled(8, option)));
+        break;
+    case CT_ToolButton:
+        size = QProxyStyle::sizeFromContents(type, option, contentsSize, widget);
+        size += dpiScaled(QSize(2, 4), option);
         break;
     case CT_TabBarTab:
         if (const QStyleOptionTab *tab = qstyleoption_cast<const QStyleOptionTab *>(option)) {

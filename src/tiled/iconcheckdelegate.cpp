@@ -32,6 +32,7 @@ IconCheckDelegate::IconCheckDelegate(IconType icon,
                                      bool exclusive,
                                      QObject *parent)
     : QItemDelegate(parent)
+    , mIconType(icon)
     , mExclusive(exclusive)
 {
     switch (icon) {
@@ -120,7 +121,21 @@ void IconCheckDelegate::drawCheck(QPainter *painter,
 {
     const QRect &r = mExclusive ? opt.rect : rect;
     const QIcon &icon = (state == Qt::Checked) ? mCheckedIcon : mUncheckedIcon;
-    const QPixmap &pixmap = icon.pixmap(mExclusive ? Utils::smallIconSize() : r.size());
+    QPixmap pixmap = icon.pixmap(mExclusive ? Utils::smallIconSize() : r.size());
+
+    // The lock icons are monochrome, unlike the detailed visibility icons.
+    // Follow the text palette so their state remains readable on dark themes,
+    // selected rows and disabled views without changing the original alpha.
+    if (mIconType == LockedIcon && !pixmap.isNull()) {
+        const QPalette::ColorGroup group = !(opt.state & QStyle::State_Enabled)
+                ? QPalette::Disabled : (opt.state & QStyle::State_Active)
+                ? QPalette::Active : QPalette::Inactive;
+        const QPalette::ColorRole role = (opt.state & QStyle::State_Selected)
+                ? QPalette::HighlightedText : QPalette::Text;
+        QPainter iconPainter(&pixmap);
+        iconPainter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+        iconPainter.fillRect(pixmap.rect(), opt.palette.color(group, role));
+    }
 
     QSize layoutSize = pixmap.size() / pixmap.devicePixelRatio();
     QRect targetRect(QPoint(0, 0), layoutSize);

@@ -1,0 +1,83 @@
+name: Validate layer fixes on macOS and Windows
+
+# Deliberately manual: no signing, deployment, upstream PR, or automatic paid work.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-14
+    timeout-minutes: 40
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          arch: clang_64
+          cache: true
+      - name: Install and configure Qbs
+        run: |
+          brew install qbs
+          echo "$(brew --prefix qbs)/bin" >> "$GITHUB_PATH"
+          export PATH="$(brew --prefix qbs)/bin:$PATH"
+          qbs setup-toolchains --detect
+          qbs setup-qt "$QT_ROOT_DIR/bin/qmake" qt
+          qbs config profiles.qt.baseProfile xcode
+      - name: Build shared editor source and focused tests
+        run: qbs build profile:qt config:debug -p tiled,test_layers,test_uistyle
+      - name: Run layer regressions
+        run: qbs run profile:qt config:debug -p test_layers -- -o "$GITHUB_WORKSPACE/layers.txt,txt"
+      - name: Run UI regressions at 1x and 2x
+        run: |
+          qbs run profile:qt config:debug -p test_uistyle -- -o "$GITHUB_WORKSPACE/uistyle-1x.txt,txt"
+          QT_SCALE_FACTOR=2 qbs run profile:qt config:debug -p test_uistyle -- -o "$GITHUB_WORKSPACE/uistyle-2x.txt,txt"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: macos-layer-ui-results
+          path: |
+            layers.txt
+            uistyle-*.txt
+          if-no-files-found: warn
+
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 40
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          arch: win64_msvc2022_64
+          cache: true
+      - name: Install and configure Qbs
+        shell: pwsh
+        run: |
+          choco install -y qbs
+          qbs setup-toolchains --detect
+          qbs setup-qt "$env:QT_ROOT_DIR\bin\qmake.exe" qt
+          qbs config profiles.qt.baseProfile MSVC2022-x64
+      - name: Build shared editor source and focused tests
+        run: qbs build profile:qt config:debug -p tiled,test_layers,test_uistyle
+      - name: Run layer regressions
+        run: qbs run profile:qt config:debug -p test_layers -- -o "$env:GITHUB_WORKSPACE/layers.txt,txt"
+      - name: Run UI regressions at 1x and 2x
+        run: |
+          qbs run profile:qt config:debug -p test_uistyle -- -o "$env:GITHUB_WORKSPACE/uistyle-1x.txt,txt"
+          $env:QT_SCALE_FACTOR = '2'
+          qbs run profile:qt config:debug -p test_uistyle -- -o "$env:GITHUB_WORKSPACE/uistyle-2x.txt,txt"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: windows-layer-ui-results
+          path: |
+            layers.txt
+            uistyle-*.txt
+          if-no-files-found: warn

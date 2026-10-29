@@ -91,6 +91,9 @@ void MapObjectModel::languageChanged()
 QModelIndex MapObjectModel::index(int row, int column,
                                   const QModelIndex &parent) const
 {
+    if (!hasIndex(row, column, parent))
+        return QModelIndex();
+
     if (ObjectGroup *objectGroup = toObjectGroup(parent)) {
         if (row < objectGroup->objectCount())
             return createIndex(row, column, objectGroup->objectAt(row));
@@ -128,7 +131,7 @@ QModelIndex MapObjectModel::parent(const QModelIndex &index) const
 
 int MapObjectModel::rowCount(const QModelIndex &parent) const
 {
-    if (!mMapDocument)
+    if (!mMapDocument || parent.column() > 0)
         return 0;
     if (!parent.isValid())
         return filteredChildLayers(nullptr).size();
@@ -479,6 +482,21 @@ void MapObjectModel::layerAboutToBeRemoved(GroupLayer *groupLayer, int index)
         beginRemoveRows(parent, row, row);
         filtered.removeAt(row);
         endRemoveRows();
+
+        // A removed group can be destroyed when undo history is cleared or
+        // truncated. Do not retain its children under a dangling pointer key:
+        // a later group may be allocated at the same address. Invalidate the
+        // whole subtree, including nested groups, and rebuild lazily on undo.
+        if (auto removedGroup = layer->asGroupLayer()) {
+            QList<GroupLayer *> pending { removedGroup };
+            while (!pending.isEmpty()) {
+                auto group = pending.takeLast();
+                mFilteredLayers.remove(group);
+                for (auto child : group->layers())
+                    if (auto childGroup = child->asGroupLayer())
+                        pending.append(childGroup);
+            }
+        }
     }
 }
 

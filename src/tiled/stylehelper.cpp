@@ -48,16 +48,16 @@ static QPalette createPalette(const QColor &windowColor,
     };
 
     const bool isLight = windowValue > 128;
-    const int baseValue = isLight ? windowValue + 48 : windowValue - 24;
+    const int baseValue = isLight ? windowValue + 48 : windowValue - 10;
     const int textValue = isLight ? qMax(0, windowValue - 160)
-                                  : qMin(255, windowValue + 160);
+                                  : qMin(255, windowValue + 176);
 
     const QColor text { textValue, textValue, textValue };
     const QColor disabledText { textValue, textValue, textValue, 128 };
 
     QPalette palette(fromValue(windowValue));
     palette.setColor(QPalette::Base, fromValueHalfSat(baseValue));
-    palette.setColor(QPalette::AlternateBase, fromValueHalfSat(baseValue - 10));
+    palette.setColor(QPalette::AlternateBase, fromValueHalfSat(baseValue + (isLight ? -10 : 4)));
     palette.setColor(QPalette::WindowText, text);
     palette.setColor(QPalette::ButtonText, text);
     palette.setColor(QPalette::Text, text);
@@ -76,9 +76,15 @@ static QPalette createPalette(const QColor &windowColor,
     palette.setColor(QPalette::PlaceholderText, disabledText);
 
     if (!isLight) {
-        const QColor lightskyblue { 0x87, 0xce, 0xfa };
-        palette.setColor(QPalette::Link, lightskyblue);
-        palette.setColor(QPalette::LinkVisited, lightskyblue);
+        // Keep tooltips and links in the same palette instead of inheriting
+        // Fusion's light tooltip surface in an otherwise dark editor.
+        palette.setColor(QPalette::ToolTipBase, fromValueHalfSat(windowValue + 16));
+        palette.setColor(QPalette::ToolTipText, text);
+        const QColor linkColor = QColor::fromHsv(highlightColor.hsvHue(),
+                                                qMin(100, highlightColor.hsvSaturation()),
+                                                qMax(210, highlightColor.value()));
+        palette.setColor(QPalette::Link, linkColor);
+        palette.setColor(QPalette::LinkVisited, linkColor.darker(110));
     }
 
     return palette;

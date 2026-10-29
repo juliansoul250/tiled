@@ -66,6 +66,7 @@ protected:
 private:
     QIcon mCheckedIcon;
     QIcon mUncheckedIcon;
+    const IconType mIconType;
     bool mExclusive;
 };
 

@@ -64,6 +64,7 @@ LayerDock::LayerDock(QWidget *parent):
     QMenu *newLayerMenu = handler->createNewLayerMenu(this);
 
     mNewLayerButton = new QToolButton;
+    mNewLayerButton->setAutoRaise(true);
     mNewLayerButton->setPopupMode(QToolButton::InstantPopup);
     mNewLayerButton->setMenu(newLayerMenu);
     mNewLayerButton->setIcon(newLayerMenu->icon());
@@ -77,8 +78,10 @@ LayerDock::LayerDock(QWidget *parent):
     spacerWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
     buttonContainer->addWidget(mNewLayerButton);
+    buttonContainer->addSeparator();
     buttonContainer->addAction(handler->actionMoveLayersUp());
     buttonContainer->addAction(handler->actionMoveLayersDown());
+    buttonContainer->addSeparator();
     buttonContainer->addAction(handler->actionDuplicateLayers());
     buttonContainer->addAction(handler->actionRemoveLayers());
     buttonContainer->addSeparator();
@@ -188,6 +191,8 @@ LayerView::LayerView(QWidget *parent)
 {
     setHeaderHidden(true);
     setUniformRowHeights(true);
+    setAlternatingRowColors(true);
+    setAllColumnsShowFocus(true);
     setSelectionMode(QAbstractItemView::ExtendedSelection);
     setDragDropMode(QAbstractItemView::InternalMove);
 
@@ -208,7 +213,7 @@ LayerView::LayerView(QWidget *parent)
 
 QSize LayerView::sizeHint() const
 {
-    return Utils::dpiScaled(QSize(130, 100));
+    return Utils::dpiScaled(QSize(220, 140));
 }
 
 void LayerView::setMapDocument(MapDocument *mapDocument)
