@@ -5,6 +5,14 @@ on:
   workflow_dispatch:
   push:
     branches: [fix/layer-stability-ui]
+    paths:
+      - '.github/workflows/layer-ui-validation.yml'
+      - 'tiled.qbs'
+      - 'qbs/**'
+      - 'src/**'
+      - 'tests/**'
+      - 'dist/**'
+      - 'translations/**'
 
 permissions:
   contents: read

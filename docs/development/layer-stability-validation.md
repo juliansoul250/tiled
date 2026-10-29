@@ -18,8 +18,9 @@ Baseline: official Tiled **v1.12.2**, commit
 
 This is a Linux reproduction and repair of demonstrated defects. It does **not**
 establish that either defect caused a particular crash in an unknown, deleted
-macOS installation. No macOS crash report, affected project, or macOS runtime
-was available for validation.
+macOS installation. No crash report, affected project, or access to that old
+installation was available. Subsequent native CI results below cover the patched
+source on fresh hosted macOS and Windows machines, not that historical crash.
 
 ## Automated regression coverage
 
@@ -49,7 +50,7 @@ QT_QPA_PLATFORM=offscreen qbs run profile:qt6 config:debug -p test_uistyle
 QT_QPA_PLATFORM=offscreen qbs build profile:qt6 config:debug -p tests
 ```
 
-### Validation environment and build limitation
+### Local Linux validation environment and build limitation
 
 Debian 13 x86-64, GCC 14, Qt 6.8.2, debug builds. Signed Debian tool/development
 packages were extracted into the private workspace, not installed system-wide.
@@ -58,13 +59,14 @@ process launcher requires. Qbs resolved the project but could not execute a
 build. A separate qmake/Make harness, derived from the same explicit upstream
 source lists, definitions, Qt dependencies, and resources, was therefore used
 for the executed tests and GUI binaries. Qbs itself and its security environment
-were not modified. The normal Qbs path and macOS build are **not verified here**.
+were not modified. This limitation applies to the local Linux sandbox only;
+the normal Qbs build subsequently succeeded on native macOS and Windows CI.
 
 The fallback builds the editor, all 16 default C++ format plugins, translations,
 and the test executables. The optional Python plugin is not built. The original
 baseline executable and libraries are retained separately from the patched build.
 
-## Results and known baseline limitations
+## Local Linux results and known baseline limitations
 
 - Added layer suite: **14 passed, 0 failed**. The unmodified baseline fails the
   targeted tree-contract and stale-cache regressions.
@@ -88,6 +90,29 @@ baseline executable and libraries are retained separately from the patched build
 
 The map readers/writers and serialization formats are unchanged by this patch.
 
-For the shared macOS/Windows source, native build instructions, portability
-review, and branch-scoped/manual platform workflow (native results pending),
-see `mac-windows-build.md`.
+## Native macOS and Windows CI
+
+[Run 40814104903](https://github.com/juliansoul250/tiled/actions/runs/40814104903)
+passed on 2026-10-29 for commit
+`8ca31908816d677d103bce3c76700eeb079bfaea`. Both jobs built the shared editor and
+focused tests in debug configuration using the unchanged upstream Qbs build path.
+Downloaded test artifacts were verified against GitHub's SHA-256 metadata.
+
+| Native host / toolchain | Layer suite | UI 1x | UI 2x |
+| --- | --- | --- | --- |
+| macOS 14.8, arm64, Xcode 15.4 / Apple LLVM 15, Qbs 3.3.1, Qt 6.8.3 | 14 passed | 38 passed | 38 passed |
+| Windows Server 2022, x86-64, MSVC 2022 (14.44.35207), Qbs 3.3.0, Qt 6.8.3 | 14 passed | 38 passed | 38 passed |
+
+All six test invocations report **0 failed, 0 skipped, 0 blacklisted**.
+The test logs are available in the run's
+[macOS artifact](https://github.com/juliansoul250/tiled/actions/runs/40814104903/artifacts/12872295629)
+and [Windows artifact](https://github.com/juliansoul250/tiled/actions/runs/40814104903/artifacts/12871946470).
+UI tests use Qt's offscreen platform. They emit nonfatal font lookup warnings
+(macOS generic family alias; Windows offscreen font directory), retained in the
+logs. This verifies builds and focused automated regressions, **not** interactive
+native dialogs, real-display/retina appearance, the entire upstream suite,
+Qt 5.15.2, Intel macOS, Windows ARM64, or the user's historical Mac crash.
+No signed/notarized application or installer was produced.
+
+For the shared source, native build instructions, portability review, and
+branch/path-scoped or manual platform workflow, see `mac-windows-build.md`.
