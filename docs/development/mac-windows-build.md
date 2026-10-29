@@ -78,13 +78,17 @@ or upstream release secret is included or requested by this patch.
 
 ## Optional GitHub verification
 
-`.github/workflows/layer-ui-validation.yml` adds a **manual-only**
-`workflow_dispatch` using standard `macos-14` and `windows-2022` hosted runners,
+`.github/workflows/layer-ui-validation.yml` supports manual `workflow_dispatch`
+and pushes **only to `fix/layer-stability-ui`**, using standard `macos-14` and
+`windows-2022` hosted runners,
 Qt 6.8.3, and Qbs. It builds the editor and focused layer/UI tests, then runs UI
 checks at 1x and 2x and uploads text test results. It has read-only repository
 permissions, no signing, no deployment, no release creation, and no secret
-inputs. This workflow has been syntax-reviewed but **has not run** while GitHub
-write authentication is unavailable. It must not be presented as a green CI run.
+inputs. Windows selects the actual installed MSVC x64 compiler using `vswhere`
+and registers a named Qbs profile instead of assuming an auto-detected profile
+name. The workflow has been syntax-reviewed; **native platform build and test
+results are pending**. Do not present the workflow definition or the Linux test
+results as a green macOS/Windows CI run.
 
 The workflow intentionally runs focused regressions, not a replacement for all
 upstream tests. `layer-stability-validation.md` documents the unrelated existing

@@ -1,8 +1,10 @@
 name: Validate layer fixes on macOS and Windows
 
-# Deliberately manual: no signing, deployment, upstream PR, or automatic paid work.
+# Confined to this public validation branch; no signing, deployment, or secrets.
 on:
   workflow_dispatch:
+  push:
+    branches: [fix/layer-stability-ui]
 
 permissions:
   contents: read
@@ -28,6 +30,7 @@ jobs:
           qbs setup-toolchains --detect
           qbs setup-qt "$QT_ROOT_DIR/bin/qmake" qt
           qbs config profiles.qt.baseProfile xcode
+          qbs config --list
       - name: Build shared editor source and focused tests
         run: qbs build profile:qt config:debug -p tiled,test_layers,test_uistyle
       - name: Run layer regressions
@@ -61,9 +64,16 @@ jobs:
         shell: pwsh
         run: |
           choco install -y qbs
-          qbs setup-toolchains --detect
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { throw 'No installed MSVC x64 toolchain was found.' }
+          $toolset = (Get-Content "$vs\VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt").Trim()
+          $compiler = "$vs\VC\Tools\MSVC\$toolset\bin\Hostx64\x64\cl.exe"
+          if (-not (Test-Path $compiler)) { throw "MSVC compiler not found: $compiler" }
+          qbs setup-toolchains --type msvc "$compiler" native-msvc
           qbs setup-qt "$env:QT_ROOT_DIR\bin\qmake.exe" qt
-          qbs config profiles.qt.baseProfile MSVC2022-x64
+          qbs config profiles.qt.baseProfile native-msvc
+          qbs config --list
       - name: Build shared editor source and focused tests
         run: qbs build profile:qt config:debug -p tiled,test_layers,test_uistyle
       - name: Run layer regressions

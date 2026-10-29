@@ -89,4 +89,5 @@ baseline executable and libraries are retained separately from the patched build
 The map readers/writers and serialization formats are unchanged by this patch.
 
 For the shared macOS/Windows source, native build instructions, portability
-review, and unrun manual platform workflow, see `mac-windows-build.md`.
+review, and branch-scoped/manual platform workflow (native results pending),
+see `mac-windows-build.md`.
