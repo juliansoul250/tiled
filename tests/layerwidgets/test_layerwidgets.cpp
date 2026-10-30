@@ -14,6 +14,8 @@
 #include "pluginmanager.h"
 #include <QTemporaryDir>
 #include <QElapsedTimer>
+#include <QTranslator>
+#include <QLibraryInfo>
 
 #include <QAction>
 #include <QApplication>
@@ -44,6 +46,8 @@ private:
     std::unique_ptr<MapDocumentActionHandler> mActionHandler;
 private slots:
     void initTestCase();
+    void languagePreferenceDefaults();
+    void simplifiedChineseCatalogs();
     void continuousNativeStability();
     void saveAndReopenOrdinaryMap();
     void renameAndSwitchDocument();
@@ -83,6 +87,43 @@ void test_LayerWidgets::initTestCase()
             << "Qt:" << qVersion();
     if (qEnvironmentVariableIsSet("TILED_REQUIRE_COCOA"))
         QCOMPARE(QGuiApplication::platformName(), QStringLiteral("cocoa"));
+}
+
+void test_LayerWidgets::languagePreferenceDefaults()
+{
+    auto *preferences = Preferences::instance();
+    const QString key = QStringLiteral("Interface/Language");
+    const bool hadValue = preferences->contains(key);
+    const QVariant oldValue = preferences->value(key);
+    const auto restore = qScopeGuard([&] {
+        if (hadValue)
+            preferences->setValue(key, oldValue);
+        else
+            preferences->remove(key);
+    });
+    preferences->remove(key);
+    QCOMPARE(preferences->language(), QStringLiteral("zh_CN"));
+    preferences->setValue(key, QString());
+    QCOMPARE(preferences->language(), QStringLiteral("zh_CN"));
+    preferences->setValue(key, QStringLiteral("en_US"));
+    QCOMPARE(preferences->language(), QStringLiteral("en_US"));
+    preferences->setValue(key, QStringLiteral("zh_TW"));
+    QCOMPARE(preferences->language(), QStringLiteral("zh_TW"));
+}
+
+void test_LayerWidgets::simplifiedChineseCatalogs()
+{
+    QTranslator appTranslator;
+    const QString catalog = qEnvironmentVariable("TILED_CHINESE_CATALOG");
+    QVERIFY2(!catalog.isEmpty(), "The built Chinese catalog path must be supplied by CI");
+    QVERIFY(appTranslator.load(catalog));
+    QCOMPARE(appTranslator.translate("MainWindow", "&File"), QStringLiteral("文件(&F)"));
+    QCOMPARE(appTranslator.translate("MainWindow", "Chinese Quick Start and Troubleshooting"),
+             QStringLiteral("中文入门与故障排查"));
+    QTranslator qtTranslator;
+    QVERIFY(qtTranslator.load(QStringLiteral("qtbase_zh_CN"),
+                              QLibraryInfo::location(QLibraryInfo::TranslationsPath)));
+    QCOMPARE(qtTranslator.translate("QPlatformTheme", "Cancel"), QStringLiteral("取消"));
 }
 
 void test_LayerWidgets::continuousNativeStability()

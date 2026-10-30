@@ -55,13 +55,13 @@ AboutDialog::AboutDialog(QWidget *parent): QDialog(parent)
             "<p align=\"center\"><a href=\"https://www.mapeditor.org/\">https://www.mapeditor.org/</a></p>\n")
             .arg(QApplication::applicationVersion(), QStringLiteral("2026"));
 
-    QString buildInfo = QStringLiteral("<p align=\"center\">Qt %1 (built with %2)")
+    QString buildInfo = tr("<p align=\"center\">Qt %1 (built with %2)")
             .arg(QString::fromLatin1(qVersion()), QStringLiteral(QT_VERSION_STR));
 #ifdef Q_OS_MACOS
     QFile identity(QCoreApplication::applicationDirPath() + QStringLiteral("/../Resources/fork-build.json"));
     if (identity.open(QIODevice::ReadOnly)) {
         const auto metadata = QJsonDocument::fromJson(identity.readAll()).object();
-        buildInfo += QStringLiteral("<br>Fork commit: %1<br>Ad-hoc build; not notarized")
+        buildInfo += tr("<br>Fork commit: %1<br>Ad-hoc build; not notarized")
                 .arg(metadata.value(QStringLiteral("source_commit")).toString().toHtmlEscaped());
     }
 #endif

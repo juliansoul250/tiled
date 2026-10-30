@@ -81,6 +81,15 @@ TiledQtGuiApplication {
     }
 
     Group {
+        name: "Simplified Chinese offline guide"
+        files: ["../../docs/development/tiled-zh_CN-guide.html"]
+        qbs.install: true
+        qbs.installDir: project.windowsLayout ? "doc"
+                : qbs.targetOS.contains("macos") ? "Tiled.app/Contents/Resources"
+                : "share/doc/tiled"
+    }
+
+    Group {
         name: "Desktop file (Linux)"
         condition: qbs.targetOS.contains("linux")
         qbs.install: true

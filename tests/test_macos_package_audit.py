@@ -11,17 +11,30 @@ from unittest.mock import patch
 SCRIPT = pathlib.Path(__file__).resolve().parents[1] / 'dist/macos/verify-fork-package.py'
 
 class PackageAudit(unittest.TestCase):
-    def audit(self, *, version='6.11.3', dependency=None, uuid_mismatch=False, bad_header=False, empty_output=False, install_id=None, rpath='@executable_path/../Frameworks'):
+    def audit(self, *, version='6.11.3', dependency=None, uuid_mismatch=False, bad_header=False, empty_output=False, install_id=None, chinese_error=None, rpath='@executable_path/../Frameworks'):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             app, kit, source = (root / x for x in ('Tiled.app', 'qt', 'source'))
             framework = app / 'Contents/Frameworks/QtCore.framework'
             for p in (framework / 'Resources', app / 'Contents/PlugIns/platforms',
-                      app / 'Contents/MacOS', app / 'Contents/Resources',
+                      app / 'Contents/MacOS', app / 'Contents/Resources', app / 'Contents/Translations', kit / 'translations',
                       kit / 'plugins/platforms', source):
                 p.mkdir(parents=True)
             (framework / 'Resources/Info.plist').write_bytes(plistlib.dumps({
                 'CFBundleShortVersionString': '6.11', 'CFBundleVersion': version}))
+            (app / 'Contents/Translations/tiled_zh_CN.qm').write_bytes(b'test-catalog')
+            (app / 'Contents/Translations/qtbase_zh_CN.qm').write_bytes(b'qt-test-catalog')
+            (kit / 'translations/qtbase_zh_CN.qm').write_bytes(b'qt-test-catalog')
+            (app / 'Contents/Resources/qt.conf').write_text('[Paths]\nTranslations=Translations\n')
+            (app / 'Contents/Resources/tiled-zh_CN-guide.html').write_text('<html lang="zh-CN">说明</html>')
+            if chinese_error == 'qt-mismatch':
+                (app / 'Contents/Translations/qtbase_zh_CN.qm').write_bytes(b'wrong-kit')
+            elif chinese_error == 'missing-app':
+                (app / 'Contents/Translations/tiled_zh_CN.qm').unlink()
+            elif chinese_error == 'missing-guide':
+                (app / 'Contents/Resources/tiled-zh_CN-guide.html').unlink()
+            elif chinese_error == 'wrong-path':
+                (app / 'Contents/Resources/qt.conf').write_text('[Paths]\nTranslations=Wrong\n')
             (app / 'Contents/Info.plist').write_bytes(plistlib.dumps({}))
             for p in (framework / 'QtCore', app / 'Contents/MacOS/Tiled',
                       app / 'Contents/PlugIns/platforms/libqcocoa.dylib',
@@ -29,7 +42,7 @@ class PackageAudit(unittest.TestCase):
                 p.write_bytes(b'MACHO')
             def command(args, **kwargs):
                 tool = pathlib.Path(args[0]).name
-                if tool == 'qmake': return '6.11.3\n'
+                if tool == 'qmake': return str(kit / 'translations') if args[-1] == 'QT_INSTALL_TRANSLATIONS' else '6.11.3\n'
                 if tool == 'file':
                     return 'Mach-O universal binary' if pathlib.Path(args[-1]).read_bytes() == b'MACHO' else 'data'
                 if tool == 'dwarfdump':
@@ -65,6 +78,14 @@ class PackageAudit(unittest.TestCase):
         with self.assertRaises(RuntimeError): self.audit(dependency='libexample.dylib', install_id='libexample.dylib')
     def test_bare_loaded_dependency_still_rejected(self):
         with self.assertRaises(RuntimeError): self.audit(dependency='liboutside.dylib', install_id='libexample.dylib')
+    def test_missing_chinese_app_catalog_rejected(self):
+        with self.assertRaises(RuntimeError): self.audit(chinese_error='missing-app')
+    def test_chinese_qt_catalog_must_match_kit(self):
+        with self.assertRaises(RuntimeError): self.audit(chinese_error='qt-mismatch')
+    def test_missing_chinese_guide_rejected(self):
+        with self.assertRaises(RuntimeError): self.audit(chinese_error='missing-guide')
+    def test_wrong_chinese_catalog_search_path_rejected(self):
+        with self.assertRaises(RuntimeError): self.audit(chinese_error='wrong-path')
     def test_wrong_patch_rejected(self):
         with self.assertRaises(RuntimeError): self.audit(version='6.11.2')
     def test_wrong_kit_uuid_rejected(self):

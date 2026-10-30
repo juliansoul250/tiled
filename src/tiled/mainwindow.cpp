@@ -700,6 +700,7 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     connect(mUi->actionClearRecentProjects, &QAction::triggered, preferences, &Preferences::clearRecentProjects);
     connect(mUi->actionProjectProperties, &QAction::triggered, this, &MainWindow::projectProperties);
 
+    connect(mUi->actionChineseGuide, &QAction::triggered, this, &MainWindow::openChineseGuide);
     connect(mUi->actionDocumentation, &QAction::triggered, this, &MainWindow::openDocumentation);
     connect(mUi->actionForum, &QAction::triggered, this, &MainWindow::openForum);
     connect(mUi->actionAbout, &QAction::triggered, this, &MainWindow::aboutTiled);
@@ -2264,6 +2265,23 @@ void MainWindow::updateZoomActions()
     mUi->actionZoomOut->setEnabled(mZoomable && mZoomable->canZoomOut());
     mUi->actionZoomNormal->setEnabled(scale != 1);
     mUi->actionFitInView->setEnabled(mDocument && mDocument->type() == Document::MapDocumentType);
+}
+
+void MainWindow::openChineseGuide()
+{
+    QString path = QCoreApplication::applicationDirPath();
+#if defined(TILED_WINDOWS_LAYOUT)
+    path += QStringLiteral("/doc/tiled-zh_CN-guide.html");
+#elif defined(Q_OS_MAC)
+    path += QStringLiteral("/../Resources/tiled-zh_CN-guide.html");
+#else
+    path += QStringLiteral("/../share/doc/tiled/tiled-zh_CN-guide.html");
+#endif
+    if (QFileInfo::exists(path))
+        QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+    else
+        QMessageBox::warning(this, tr("Chinese Guide"),
+                             tr("The bundled Chinese guide could not be found. Please reinstall this build or read docs/development/tiled-zh_CN-guide.html in the source repository."));
 }
 
 void MainWindow::openDocumentation()

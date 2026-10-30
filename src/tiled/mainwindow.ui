@@ -120,6 +120,7 @@
     <property name="title">
      <string>&amp;Help</string>
     </property>
+    <addaction name="actionChineseGuide"/>
     <addaction name="actionDocumentation"/>
     <addaction name="actionForum"/>
     <addaction name="separator"/>
@@ -535,9 +536,14 @@
     <string>Save All</string>
    </property>
   </action>
+  <action name="actionChineseGuide">
+   <property name="text">
+    <string>Chinese Quick Start and Troubleshooting</string>
+   </property>
+  </action>
   <action name="actionDocumentation">
    <property name="text">
-    <string>User Manual ↗</string>
+    <string>Official Manual (English)</string>
    </property>
   </action>
   <action name="actionNoLabels">

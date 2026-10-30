@@ -1,6 +1,8 @@
 """Fail-closed audit of the deployed app; record SDK/build identity for support."""
 import datetime
 import json
+import hashlib
+import configparser
 import pathlib
 import plistlib
 import re
@@ -24,6 +26,18 @@ def same_kit(binary, original):
     actual, sdk = (uuids(binary), uuids(original))
     require(actual and set(actual).issubset(set(sdk)), (binary, actual, original, sdk))
     return actual
+# Catalog bytes must come from the selected SDK, not an unrelated system Qt.
+translation_dir = app / 'Contents/Translations'
+require((translation_dir / 'tiled_zh_CN.qm').is_file(), '缺少 Tiled 简体中文词典')
+qt_translation_source = pathlib.Path(run(str(kit / 'bin/qmake'), '-query', 'QT_INSTALL_TRANSLATIONS'))
+qt_catalog = translation_dir / 'qtbase_zh_CN.qm'
+require(qt_catalog.is_file(), '缺少 Qt 简体中文词典')
+require(qt_catalog.read_bytes() == (qt_translation_source / qt_catalog.name).read_bytes(),
+        'Qt 中文词典与所选套件不一致')
+conf = configparser.ConfigParser()
+conf.read(app / 'Contents/Resources/qt.conf')
+require(conf.get('Paths', 'Translations', fallback='') == 'Translations', 'Qt 中文词典搜索路径不正确')
+require((app / 'Contents/Resources/tiled-zh_CN-guide.html').is_file(), '缺少离线中文使用说明')
 frameworks = list((app / 'Contents/Frameworks').glob('Qt*.framework'))
 require(frameworks, 'No deployed Qt frameworks')
 for framework in frameworks:
@@ -91,7 +105,7 @@ for binary in app.rglob('*'):
     except Exception as error:
         audit_errors.append(f"{binary}: {type(error).__name__}: {error}")
 require(not audit_errors, 'Deployed library audit failed:\n' + '\n'.join(audit_errors))
-identity = {'source_commit': run('git', '-C', str(source), 'rev-parse', 'HEAD'), 'source_dirty': bool(run('git', '-C', str(source), 'status', '--porcelain', '--untracked-files=no')), 'qt_version': expected, 'qt_kit': str(kit), 'cocoa_plugin_uuids': cocoa_uuids, 'qmake': str(kit / 'bin/qmake'), 'macdeployqt': str(kit / 'bin/macdeployqt'), 'built_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'macos': run('sw_vers'), 'architecture': run('uname', '-m'), 'signing': 'ad-hoc; NOT Developer ID signed or notarized', 'qt_frameworks': sorted((p.name for p in frameworks)), 'audited_macho_files': checked}
+identity = {'source_commit': run('git', '-C', str(source), 'rev-parse', 'HEAD'), 'source_dirty': bool(run('git', '-C', str(source), 'status', '--porcelain', '--untracked-files=no')), 'qt_version': expected, 'ui_language': 'zh_CN', 'qt_chinese_catalog_sha256': hashlib.sha256(qt_catalog.read_bytes()).hexdigest(), 'qt_kit': str(kit), 'cocoa_plugin_uuids': cocoa_uuids, 'qmake': str(kit / 'bin/qmake'), 'macdeployqt': str(kit / 'bin/macdeployqt'), 'built_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'macos': run('sw_vers'), 'architecture': run('uname', '-m'), 'signing': 'ad-hoc; NOT Developer ID signed or notarized', 'qt_frameworks': sorted((p.name for p in frameworks)), 'audited_macho_files': checked}
 (app / 'Contents/Resources/fork-build.json').write_text(json.dumps(identity, indent=2) + '\n')
 plist_path = app / 'Contents/Info.plist'
 plist = plistlib.loads(plist_path.read_bytes())

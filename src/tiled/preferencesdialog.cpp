@@ -54,13 +54,13 @@ PreferencesDialog::PreferencesDialog(QWidget *parent)
     for (const QString &name : std::as_const(mLanguages)) {
         QLocale locale(name);
         QString string = QStringLiteral("%1 (%2)")
-            .arg(QLocale::languageToString(locale.language()),
-                 QLocale::countryToString(locale.country()));
+            .arg(locale.nativeLanguageName(),
+                 locale.nativeCountryName());
         mUi->languageCombo->addItem(string, name);
     }
 
     mUi->languageCombo->model()->sort(0);
-    mUi->languageCombo->insertItem(0, tr("System default"));
+    mUi->languageCombo->insertItem(0, tr("Default (Simplified Chinese)"));
 
     mUi->styleCombo->addItems({ QApplication::translate("PreferencesDialog", "Native"),
                                 QApplication::translate("PreferencesDialog", "Tiled Fusion") });
@@ -278,7 +278,7 @@ void PreferencesDialog::fromPreferences()
 
 void PreferencesDialog::retranslateUi()
 {
-    mUi->languageCombo->setItemText(0, tr("System default"));
+    mUi->languageCombo->setItemText(0, tr("Default (Simplified Chinese)"));
 
     mUi->styleCombo->setItemText(0, QApplication::translate("PreferencesDialog", "Native"));
     mUi->styleCombo->setItemText(1, QApplication::translate("PreferencesDialog", "Tiled Fusion"));

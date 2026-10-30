@@ -1,3 +1,6 @@
+> **本分支简体中文版**：请先阅读 [中文安装与源码交接说明](docs/development/mac-windows-build.md) 和 [离线中文使用指南](docs/development/tiled-zh_CN-guide.html)。Mac 修复版固定使用完整 Qt 6.11.3，保留原作者及许可证；请以对应提交通过的构建结果为准。
+> 下方英文介绍中的发行版签名说明属于上游项目，不代表本分支应用包已经签名公证；本分支交付为临时签名（ad-hoc）、未经公证。
+
 Tiled Map Editor - https://www.mapeditor.org/
 
 About Tiled

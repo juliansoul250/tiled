@@ -53,6 +53,12 @@ with log_path.open('w') as log:
             time.sleep(0.5)
         else:
             raise RuntimeError('No initialized native dock state in production app log')
+        if os.environ.get('TILED_EXPECT_CHINESE') == '1':
+            text = log_path.read_text()
+            if 'Localization: language=zh_CN app=1 qt=1 file-menu=文件' not in text:
+                raise RuntimeError('简体中文词典未实际加载；请核对语言设置、应用与 Qt 词典打包。')
+            (out / 'chinese-localization-result.txt').write_text(
+                'PASS: 实际应用已加载 Tiled 和 Qt 简体中文词典，文件菜单为中文。\n')
         # AppleEvents activate/quit the application, not Accessibility keystrokes.
         # Permission denial is an explicit test failure; do not bypass it.
         target = json.dumps(str(app))

@@ -49,7 +49,9 @@ jobs:
           qbs config profiles.qt.baseProfile xcode
           qbs config --list
       - name: Verify donation UX removal and retained attribution
-        run: python tests/check_fork_ui_policy.py
+        run: |
+          python tests/check_fork_ui_policy.py
+          python tests/check_chinese_translation.py
       - name: Build shared editor source and focused tests
         run: qbs build profile:qt config:debug projects.Tiled.nativeWidgetTests:true -p tiled,test_layers,test_uistyle,test_layerwidgets
       - name: Run layer regressions
@@ -62,6 +64,7 @@ jobs:
         timeout-minutes: 30
         env:
           QT_QPA_PLATFORM: cocoa
+          TILED_EXPECT_CHINESE: '1'
           TILED_RUN_SOAK: ${{ matrix.os == 'xcode-27' }}
           TILED_REQUIRE_COCOA: '1'
           QTEST_FUNCTION_TIMEOUT: '60000'
@@ -74,6 +77,11 @@ jobs:
           python3 - <<'PYTHON'
           import os, pathlib, signal, subprocess, sys
           out = pathlib.Path(os.environ['TILED_WIDGET_ARTIFACTS'])
+          apps = [p.resolve() for p in pathlib.Path('debug/install-root').rglob('Tiled.app')
+                  if (p / 'Contents/MacOS/Tiled').is_file()]
+          if len(apps) != 1:
+              raise RuntimeError('Expected one built Tiled application for translation checks')
+          os.environ['TILED_CHINESE_CATALOG'] = str(apps[0] / 'Contents/Translations/tiled_zh_CN.qm')
           command = ['qbs', 'run', 'profile:qt', 'config:debug', 'projects.Tiled.nativeWidgetTests:true', '-p', 'test_layerwidgets', '--']
           # Scoped to this disposable CI account, never the user's Mac. Keep the
           # application accessibility behavior intact and test BOTH real states.
@@ -181,7 +189,9 @@ jobs:
           qbs config profiles.qt.baseProfile native-msvc
           qbs config --list
       - name: Verify donation UX removal and retained attribution
-        run: python tests/check_fork_ui_policy.py
+        run: |
+          python tests/check_fork_ui_policy.py
+          python tests/check_chinese_translation.py
       - name: Build shared editor source and focused tests
         run: qbs build profile:qt config:debug -p tiled,test_layers,test_uistyle
       - name: Run layer regressions

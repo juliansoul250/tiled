@@ -2,14 +2,6 @@ name: Validate unchanged-source macOS package
 
 # No generic skip-tests input. This path can only reuse one verified source tree.
 on:
-  push:
-    branches: [fix/layer-stability-ui]
-    paths:
-      - '.github/workflows/macos-package-validation.yml'
-      - 'dist/macos/build-fork-package.sh'
-      - 'dist/macos/verify-fork-package.py'
-      - 'tests/test_macos_package_audit.py'
-      - 'tests/verify_package_source_baseline.py'
   workflow_dispatch:
 
 permissions:

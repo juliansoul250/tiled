@@ -521,7 +521,11 @@ bool Preferences::exportOption(Preferences::ExportOption option) const
 
 QString Preferences::language() const
 {
-    return get<QString>("Interface/Language");
+    // This fork is delivered as a Simplified Chinese edition. Keep an explicit
+    // alternative language, but give both new and legacy system-default profiles
+    // a Chinese interface without rewriting their saved preference.
+    const auto language = get<QString>("Interface/Language");
+    return language.isEmpty() ? QStringLiteral("zh_CN") : language;
 }
 
 void Preferences::setLanguage(const QString &language)

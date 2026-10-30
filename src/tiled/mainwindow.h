@@ -176,6 +176,7 @@ private:
     void updateSnappingActions(SnapMode mode);
     void updateZoomable();
     void updateZoomActions();
+    void openChineseGuide();
     void openDocumentation();
     void openForum();
     void aboutTiled();

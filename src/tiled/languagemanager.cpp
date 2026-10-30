@@ -24,6 +24,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QDebug>
 #include <QDirIterator>
 #include <QLibraryInfo>
 #include <QLocale>
@@ -65,19 +66,27 @@ void LanguageManager::installTranslators()
     const QString qtTranslationsDir =
             QLibraryInfo::location(QLibraryInfo::TranslationsPath);
 
-    if (mQtTranslator->load(locale,
-                            QStringLiteral("qt"),
-                            QStringLiteral("_"),
-                            qtTranslationsDir)) {
+    // Some kits provide the Qt meta-catalog without every optional dependency.
+    // Load the official qtbase catalog as a fallback so standard Qt dialogs do
+    // not silently remain English when that meta-catalog cannot be resolved.
+    const bool qtLoaded = mQtTranslator->load(locale, QStringLiteral("qt"),
+                                             QStringLiteral("_"), qtTranslationsDir)
+            || mQtTranslator->load(locale, QStringLiteral("qtbase"),
+                                   QStringLiteral("_"), qtTranslationsDir);
+    if (qtLoaded)
         QCoreApplication::installTranslator(mQtTranslator.get());
+
+    const bool appLoaded = mAppTranslator->load(locale, QStringLiteral("tiled"),
+                                               QStringLiteral("_"), mTranslationsDir);
+    if (appLoaded)
+        QCoreApplication::installTranslator(mAppTranslator.get());
+
+    if (qEnvironmentVariableIsSet("TILED_WIDGET_ARTIFACTS")) {
+        qInfo().noquote() << QStringLiteral("Localization: language=%1 app=%2 qt=%3 file-menu=%4")
+                .arg(locale.name()).arg(appLoaded).arg(qtLoaded)
+                .arg(QCoreApplication::translate("MainWindow", "&File"));
     }
 
-    if (mAppTranslator->load(locale,
-                             QStringLiteral("tiled"),
-                             QStringLiteral("_"),
-                             mTranslationsDir)) {
-        QCoreApplication::installTranslator(mAppTranslator.get());
-    }
 }
 
 QStringList LanguageManager::availableLanguages()

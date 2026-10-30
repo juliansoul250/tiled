@@ -6,12 +6,15 @@ ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 QT_ROOT_DIR=$(cd "$QT_ROOT_DIR" && pwd)
 QMAKE="$QT_ROOT_DIR/bin/qmake"
 DEPLOY="$QT_ROOT_DIR/bin/macdeployqt"
-[[ $("$QMAKE" -query QT_VERSION) == 6.11.3 ]] || { echo 'Qt 6.11.3 is required' >&2; exit 1; }
+[[ $("$QMAKE" -query QT_VERSION) == 6.11.3 ]] || { echo '必须使用完整的 Qt 6.11.3 套件' >&2; exit 1; }
 [[ -x "$DEPLOY" ]] || exit 1
+QT_TRANSLATIONS=$("$QMAKE" -query QT_INSTALL_TRANSLATIONS)
+[[ -f "$QT_TRANSLATIONS/qtbase_zh_CN.qm" ]] || { echo 'Qt 套件缺少官方简体中文词典 qtbase_zh_CN.qm' >&2; exit 1; }
+python3 "$ROOT/tests/check_chinese_translation.py"
 # mktemp prevents reuse of products from another SDK or diagnostic configuration.
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/tiled-package.XXXXXXXX")
 export TILED_PACKAGE_WORK="$WORK"
-echo "Fresh package workspace: $WORK"
+echo "全新构建目录：$WORK"
 python3 "$ROOT/tests/test_macos_package_audit.py"
 qbs setup-toolchains --detect
 qbs setup-qt "$QMAKE" tiled-package-6113
@@ -32,10 +35,28 @@ for bundle in list(app.rglob('*.dSYM')):
 PYTHON
 "$DEPLOY" "$APP" -verbose=2 2>&1 | tee "$WORK/macdeployqt.log"
 if grep -q '^[[:space:]]*ERROR:' "$WORK/macdeployqt.log"; then
-    echo "macdeployqt reported an error; see $WORK/macdeployqt.log" >&2
+    echo "Qt 部署报告错误，请查看 $WORK/macdeployqt.log" >&2
     exit 1
 fi
 (cd "$WORK/stage" && ruby "$ROOT/dist/macos/fixup-install-names.rb")
+# Ship the same kit's official Chinese Qt catalogs alongside Tiled's catalog.
+python3 - "$APP" "$QT_TRANSLATIONS" <<'PYTHON'
+import configparser, pathlib, shutil, sys
+app, translations = map(pathlib.Path, sys.argv[1:])
+destination = app / 'Contents/Translations'
+destination.mkdir(exist_ok=True)
+for catalog in translations.glob('*_zh_CN.qm'):
+    shutil.copy2(catalog, destination / catalog.name)
+conf = app / 'Contents/Resources/qt.conf'
+settings = configparser.ConfigParser()
+settings.optionxform = str
+settings.read(conf)
+if not settings.has_section('Paths'):
+    settings.add_section('Paths')
+settings['Paths']['Translations'] = 'Translations'
+with conf.open('w') as stream:
+    settings.write(stream)
+PYTHON
 cp "$ROOT"/AUTHORS "$ROOT"/COPYING "$ROOT"/LICENSE.* "$APP/Contents/Resources/"
 if [[ -n "${TILED_SOURCE_VALIDATION_RECORD:-}" ]]; then
     cp "$TILED_SOURCE_VALIDATION_RECORD" "$APP/Contents/Resources/source-validation.json"
@@ -51,8 +72,9 @@ export TILED_SMOKE_APP="$DEST/Tiled.app"
 export TILED_SMOKE_CWD="$DEST"
 export TILED_WIDGET_ARTIFACTS="${TILED_WIDGET_ARTIFACTS:-$DEST/validation}"
 mkdir -p "$TILED_WIDGET_ARTIFACTS"
+export TILED_EXPECT_CHINESE=1
 python3 "$ROOT/tests/native_app_smoke.py"
 ZIP="${TILED_PACKAGE_ZIP:-$ROOT/Tiled-macOS-Qt6.11.3-ad-hoc.zip}"
 ditto -c -k --sequesterRsrc --keepParent "$DEST/Tiled.app" "$ZIP"
 shasum -a 256 "$ZIP" | tee "$ZIP.sha256"
-echo "Ad-hoc signed, NOT notarized: $ZIP"
+echo "中文应用包已生成（临时签名，未经 Apple 公证）：$ZIP"

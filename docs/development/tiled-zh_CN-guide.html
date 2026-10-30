@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tiled 中文使用说明</title>
+<style>body{font:17px/1.8 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:#25313c;background:#f5f7f9;margin:0}main{max-width:900px;margin:auto;padding:40px 28px 70px;background:white}h1,h2{line-height:1.4;color:#16483f}h1{font-size:32px}h2{margin-top:36px;border-bottom:1px solid #d9e5e1;padding-bottom:8px}a{color:#176455}code{background:#edf2f5;padding:2px 5px;border-radius:4px;overflow-wrap:anywhere}pre{background:#edf2f5;padding:16px;overflow:auto}.note{padding:14px 18px;background:#edf7f2;border-left:4px solid #32806b}.warning{padding:14px 18px;background:#fff5df;border-left:4px solid #c58a22}li{margin:6px 0}table{border-collapse:collapse;width:100%}td,th{border:1px solid #dce4e8;padding:9px;text-align:left}small{color:#586b77}</style></head>
+<body><main>
+<h1>Tiled 中文使用说明</h1><p>适用于本分支的简体中文版。说明可离线阅读；菜单与常用操作采用中文，保留原作者署名与许可证。</p>
+<div class="note"><strong>先保护文件：</strong>编辑重要地图前，先复制整个项目文件夹作为备份。地图、瓦片集、图片和脚本之间可能使用相对路径，请尽量一起保存、一起移动。</div>
+<h2>一、安装与确认版本</h2>
+<ol><li>从本分支<strong>通过全部验证的工作流</strong>下载 <code>Tiled-macOS-Qt6.11.3-ad-hoc</code>，再解压里面的应用 ZIP。不要安装原版旧包来替代此修复版。</li>
+<li>这是面向 <strong>Apple Silicon（M 系列芯片）</strong>的 Mac 构建。退出旧版 Tiled、保留备份后，把新 <code>Tiled.app</code> 复制到“应用程序”。不要继续使用指向旧副本的 Dock 快捷方式。</li>
+<li>打开 Tiled 应用菜单（或帮助菜单）中的“关于 Tiled”，核对 Qt 运行版本与编译版本均为 <strong>6.11.3</strong>，并核对提交编号。包内 <code>Contents/Resources/fork-build.json</code> 记录准确构建信息。</li>
+<li>ZIP 校验：在下载目录执行 <code>shasum -a 256 Tiled-macOS-Qt6.11.3-ad-hoc.zip</code>，把结果与附带校验文件的第一段散列值逐字比较。</li></ol>
+<div class="warning"><strong>签名说明：</strong>此包只有临时（ad-hoc）签名，未经 Apple Developer ID 签名或公证，不是“已公证安装器”。若 macOS 阻止打开，请停止并保留提示；不要关闭或绕过 Gatekeeper、SIP、签名检查等安全保护。</div>
+<h2>二、中文界面与语言切换</h2>
+<p>新配置和原先“跟随系统”的配置默认使用简体中文；如果之前明确选过其他语言，本版不会强行覆盖。需要切换时，打开“编辑 → 首选项”（Mac 上也可能位于 Tiled 应用菜单），在界面设置的语言列表中选择<strong>中文（中国）</strong>或<strong>默认（简体中文）</strong>。若界面仍是英文，可按 <em>Preferences → Interface → Language</em> 查找。</p>
+<p>中文翻译沿用官方 Tiled 已有译文，并补齐本版本缺失条目；Qt 通用控件采用同一 6.11.3 套件的官方简体中文词典。你自己的项目名、图层名、地图内容、属性值、文件名、代码和脚本标识符不会被自动翻译。macOS 原生系统面板、第三方扩展及外部网站可能仍跟随系统或使用英文。</p>
+<h2>三、打开已有地图</h2>
+<ol><li>选择“文件 → 打开文件或项目”，打开项目文件 <code>.tiled-project</code> 或地图文件 <code>.tmx</code> / <code>.tmj</code>。</li><li>若提示找不到瓦片集或图片，先确认相关 <code>.tsx</code> / <code>.tsj</code>、PNG 等资源是否随项目一同复制；不要立即删除缺失资源。</li><li>在右侧“图层”中选择要编辑的图层，在“瓦片集”中选择瓦片，再在地图画布绘制。使用“视图”菜单或缩放控件缩放；滚轮行为取决于首选项中的“鼠标滚轮默认缩放”设置。</li></ol>
+<h2>四、新建第一张地图</h2>
+<ol><li>通过“文件 → 新建”创建地图，选择方向、地图宽高（以瓦片为单位）及每个瓦片的像素尺寸。常见正交地图可从 32×32 像素瓦片开始。</li><li>创建或添加瓦片集，选择瓦片图片，并确认瓦片宽高、边距和间距与图片一致。</li><li>在“图层”面板新建瓦片层，选择画笔，在瓦片集选中瓦片后进行绘制。</li><li>尽早保存地图；若使用外部瓦片集，也要保存瓦片集文件。</li></ol>
+<h2>五、图层应该怎么用</h2>
+<table><tr><th>类型</th><th>适用内容</th></tr><tr><td>瓦片层</td><td>地面、墙体等规则网格瓦片。</td></tr><tr><td>对象层</td><td>矩形、多边形、文字、出生点等对象。</td></tr><tr><td>图像层</td><td>背景或参考图片。</td></tr><tr><td>分组层</td><td>把多个图层组织在一起，统一管理。</td></tr></table>
+<p>使用图层面板的“新建”按钮选择类型。双击名称可重命名，回车确认，Esc 取消；眼睛图标控制可见性，锁图标控制编辑保护。删除前先确认当前图层；误操作可立即撤销。浮动面板采用不透明背景，重新停靠后恢复原生侧栏材质，这是有意保留的稳定性策略。</p>
+<h2>六、保存、撤销与导出</h2>
+<ul><li><strong>保存：</strong>Mac 为 ⌘S，Windows 为 Ctrl+S；保存后可关闭再重新打开，确认内容存在。</li><li><strong>撤销 / 重做：</strong>使用“编辑”菜单。Mac 常用 ⌘Z / ⇧⌘Z；Windows 常用 Ctrl+Z / Ctrl+Y，以菜单显示为准。</li><li><strong>另存为：</strong>用于保留独立副本；移动目录后注意外部瓦片集与图片的相对路径。</li><li><strong>导出：</strong>把地图输出为游戏引擎或工具需要的格式。导出文件不一定包含全部可编辑信息，不要用它替代原始地图与项目备份。</li></ul>
+<h2>七、属性、地形与自动映射</h2>
+<p>“属性”面板显示当前地图、图层、瓦片或对象的设置；自定义属性用于给游戏逻辑提供数据。数字、布尔值、颜色、文件路径和对象引用有不同类型，请按实际用途选择。地形和自动映射属于进阶功能，应先在项目副本或小样例中尝试。</p>
+<h2>八、遇到问题怎么处理</h2>
+<ul><li><strong>仍显示英文：</strong>先确认运行的是新副本，并检查语言设置。帮助中的“官方完整手册（英文）”本来就是外部英文资料。</li><li><strong>中文显示方框：</strong>检查系统是否有中文字体；不要替换 Qt 框架或随意复制其他版本插件。</li><li><strong>面板看起来不透明：</strong>macOS“降低透明度”、浮动面板或特殊远程桌面环境可能使原生材质采用不透明回退，不代表地图数据丢失。</li><li><strong>地图空白 / 图片丢失：</strong>检查图层可见性、缩放、资源路径，以及文件是否完整复制。</li><li><strong>卡住或闪退：</strong>保留最近保存的地图和项目备份，记录最后操作、macOS 版本、“关于”中的提交与 Qt 版本；如生成 <code>.ips</code> 报告，请一并提供。不要反复用未保存的重要项目试错。</li><li><strong>构建报错：</strong>原始编译器、Git、Qt 诊断保留其技术原文，以便准确排查；把完整错误日志和实际 Qt 套件路径一起提供，不要只截最后一行。</li></ul>
+<p>本分支修复和验证了已知辅助功能相关崩溃路径，并保留持续原生界面测试。有限测试不等于承诺所有硬件、系统版本和第三方扩展永不出错。</p>
+<h2>九、更多资料与授权</h2>
+<ul><li><a href="https://github.com/juliansoul250/tiled/tree/fix/layer-stability-ui">本分支源码与最新构建说明</a></li><li><a href="https://doc.mapeditor.org/en/stable/">官方完整手册（英文）</a>：详细功能、文件格式和脚本 API。尚未核实有完整的官方在线简体中文手册；本页不冒充完整手册翻译。</li><li><a href="https://discourse.mapeditor.org/">官方社区论坛（主要为英文）</a></li></ul>
+<p><small>Tiled 原作者：Thorbjørn Lindeijer 及其他贡献者。完整署名见 AUTHORS，许可见 COPYING 与随附 LICENSE 文件。本版中文说明与补译不改变原项目及 Qt 的版权、商标或许可条款。</small></p>
+</main></body></html>
