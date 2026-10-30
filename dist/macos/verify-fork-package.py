@@ -55,15 +55,26 @@ for binary in app.rglob('*'):
                     ('Unexpected otool output', binary, line))
             headers += 1
     require(headers and dependencies, ('No loadable Mach-O dependency output', binary))
-    for line in dependencies:
-        dependency = line.strip().split(' (')[0]
+    loads = run('otool', '-l', str(binary)).splitlines()
+    # Audit actual load commands, not otool -L's mixed list of identity and
+    # dependencies. This excludes only LC_ID_DYLIB records, even when a real
+    # LC_LOAD_* has the same string or another architecture uses a different ID.
+    load_types = {'LC_LOAD_DYLIB', 'LC_LOAD_WEAK_DYLIB', 'LC_REEXPORT_DYLIB',
+                  'LC_LOAD_UPWARD_DYLIB', 'LC_LAZY_LOAD_DYLIB'}
+    loaded_dependencies = []
+    for i, line in enumerate(loads):
+        if line.strip().startswith('cmd ') and line.strip().split()[1] in load_types:
+            name = re.fullmatch(r'name (.+) \(offset \d+\)', loads[i + 2].strip())
+            require(name, ('Malformed dylib load command', binary, loads[i:i + 3]))
+            loaded_dependencies.append(name.group(1))
+    require(loaded_dependencies, ('No dynamic library load commands', binary))
+    for dependency in loaded_dependencies:
         require(dependency.startswith(('@rpath/', '@loader_path/', '@executable_path/', '/System/Library/', '/usr/lib/')), (binary, dependency))
         if dependency.startswith('@'):
             prefixes = {'@rpath/': app / 'Contents/Frameworks', '@loader_path/': binary.parent, '@executable_path/': app / 'Contents/MacOS'}
             prefix = next((p for p in prefixes if dependency.startswith(p)))
             resolved = (prefixes[prefix] / dependency[len(prefix):]).resolve()
             require(resolved.is_relative_to(app) and resolved.exists(), (binary, dependency, resolved))
-    loads = run('otool', '-l', str(binary)).splitlines()
     for i, line in enumerate(loads):
         if line.strip() == 'cmd LC_RPATH':
             path = loads[i + 2].strip().split('path ', 1)[1].split(' (offset')[0]

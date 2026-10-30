@@ -1,0 +1,59 @@
+name: Validate unchanged-source macOS package
+
+# No generic skip-tests input. This path can only reuse one verified source tree.
+on:
+  push:
+    branches: [fix/layer-stability-ui]
+    paths:
+      - '.github/workflows/macos-package-validation.yml'
+      - 'dist/macos/build-fork-package.sh'
+      - 'dist/macos/verify-fork-package.py'
+      - 'tests/test_macos_package_audit.py'
+      - 'tests/verify_package_source_baseline.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  macos-package:
+    runs-on: xcode-27
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Verify unchanged source and successful pinned native validation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tests/verify_package_source_baseline.py
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.11.3'
+          arch: clang_64
+          modules: qtimageformats
+          cache: true
+      - name: Install Qbs
+        run: |
+          brew install qbs
+          echo "$(brew --prefix qbs)/bin" >> "$GITHUB_PATH"
+      - name: Build production app, audit deployment and smoke relocated bundle
+        env:
+          TILED_WIDGET_ARTIFACTS: ${{ github.workspace }}/package-results
+          TILED_SOURCE_VALIDATION_RECORD: ${{ github.workspace }}/package-results/source-validation.json
+          TILED_SMOKE_SECONDS: '900'
+        run: python3 tests/with_native_transparency.py bash dist/macos/build-fork-package.sh
+      - uses: actions/upload-artifact@v6
+        with:
+          name: Tiled-macOS-Qt6.11.3-ad-hoc
+          path: |
+            Tiled-macOS-Qt6.11.3-ad-hoc.zip
+            Tiled-macOS-Qt6.11.3-ad-hoc.zip.sha256
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: macos-deployed-app-validation
+          path: package-results/
+          if-no-files-found: warn

@@ -37,6 +37,9 @@ if grep -q '^[[:space:]]*ERROR:' "$WORK/macdeployqt.log"; then
 fi
 (cd "$WORK/stage" && ruby "$ROOT/dist/macos/fixup-install-names.rb")
 cp "$ROOT"/AUTHORS "$ROOT"/COPYING "$ROOT"/LICENSE.* "$APP/Contents/Resources/"
+if [[ -n "${TILED_SOURCE_VALIDATION_RECORD:-}" ]]; then
+    cp "$TILED_SOURCE_VALIDATION_RECORD" "$APP/Contents/Resources/source-validation.json"
+fi
 python3 "$ROOT/dist/macos/verify-fork-package.py" "$APP" "$QT_ROOT_DIR" "$ROOT"
 # Deployment changes Mach-O load commands; replace stale signatures with ad-hoc.
 codesign --force --deep --sign - "$APP"

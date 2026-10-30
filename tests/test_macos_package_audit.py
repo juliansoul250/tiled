@@ -11,7 +11,7 @@ from unittest.mock import patch
 SCRIPT = pathlib.Path(__file__).resolve().parents[1] / 'dist/macos/verify-fork-package.py'
 
 class PackageAudit(unittest.TestCase):
-    def audit(self, *, version='6.11.3', dependency=None, uuid_mismatch=False, bad_header=False, empty_output=False, rpath='@executable_path/../Frameworks'):
+    def audit(self, *, version='6.11.3', dependency=None, uuid_mismatch=False, bad_header=False, empty_output=False, install_id=None, rpath='@executable_path/../Frameworks'):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             app, kit, source = (root / x for x in ('Tiled.app', 'qt', 'source'))
@@ -36,7 +36,11 @@ class PackageAudit(unittest.TestCase):
                     value = 'BBBB' if uuid_mismatch and str(kit) in args[-1] else 'AAAA'
                     return f'UUID: {value} (arm64) {args[-1]}\n'
                 if tool == 'otool':
-                    if args[1] == '-l': return f'cmd LC_RPATH\ncmdsize 48\npath {rpath} (offset 12)\n'
+                    if args[1] == '-l':
+                        identity = f'cmd LC_ID_DYLIB\ncmdsize 48\nname {install_id} (offset 24)\n' if install_id else ''
+                        dep = dependency or '@rpath/QtCore.framework/QtCore'
+                        load = f'cmd LC_LOAD_DYLIB\ncmdsize 48\nname {dep} (offset 24)\n'
+                        return identity + load + f'cmd LC_RPATH\ncmdsize 48\npath {rpath} (offset 12)\n'
                     if empty_output: return ''
                     if bad_header: return 'ERROR: invalid library output\n'
                     dep = dependency or '@rpath/QtCore.framework/QtCore'
@@ -55,6 +59,12 @@ class PackageAudit(unittest.TestCase):
         with self.assertRaises(RuntimeError): self.audit(bad_header=True)
     def test_empty_otool_output_rejected(self):
         with self.assertRaises(RuntimeError): self.audit(empty_output=True)
+    def test_bare_dylib_identity_is_not_external_dependency(self):
+        self.audit(install_id='libexample.dylib')
+    def test_real_load_matching_self_identity_still_rejected(self):
+        with self.assertRaises(RuntimeError): self.audit(dependency='libexample.dylib', install_id='libexample.dylib')
+    def test_bare_loaded_dependency_still_rejected(self):
+        with self.assertRaises(RuntimeError): self.audit(dependency='liboutside.dylib', install_id='libexample.dylib')
     def test_wrong_patch_rejected(self):
         with self.assertRaises(RuntimeError): self.audit(version='6.11.2')
     def test_wrong_kit_uuid_rejected(self):

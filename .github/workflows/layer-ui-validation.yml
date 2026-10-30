@@ -13,6 +13,10 @@ on:
       - 'tests/**'
       - 'dist/**'
       - 'translations/**'
+      - '!dist/macos/build-fork-package.sh'
+      - '!dist/macos/verify-fork-package.py'
+      - '!tests/test_macos_package_audit.py'
+      - '!tests/verify_package_source_baseline.py'
 
 permissions:
   contents: read

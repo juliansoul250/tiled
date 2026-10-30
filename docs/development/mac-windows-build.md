@@ -74,8 +74,14 @@ stop and report the message; do not disable or bypass OS protections.
 
 ### Secretary handoff
 
-1. In the branch's **Validate layer fixes on macOS and Windows** Actions run,
-   verify the exact commit and that **all jobs**, including `macos-package`, pass.
+1. Use an exact-commit successful **Validate layer fixes on macOS and Windows**
+   run, or **Validate unchanged-source macOS package** run. The latter rejects
+   any app/native-test/SDK change and verifies all three successful source jobs
+   at pinned `35ee147f3cdbe9ef051296021e098bda0b21176c`, run `41049665327`,
+   before rebuilding/auditing/smoking the new package. Its provenance is included
+   as `Contents/Resources/source-validation.json`. The baseline's package audit
+   failed a parser check; only its successful source tests are reused. The new
+   package still must pass every fresh deployment/signature/900-second smoke gate.
 2. Download artifact **Tiled-macOS-Qt6.11.3-ad-hoc**, verify the ZIP using
    `shasum -a 256` against the accompanying checksum, and extract it.
 3. Quit the old app, retain a backup, and copy the new `Tiled.app` to the chosen
