@@ -117,11 +117,16 @@ void test_LayerWidgets::saveAndReopenOrdinaryMap()
     PluginManager::instance();
     PluginManager::addObject(&format);
     const auto removeFormat = qScopeGuard([&] { PluginManager::removeObject(&format); });
-    MapDocument document(makeMap());
+    // This isolated widget fixture covers ordinary same-path saves, not Save As.
+    // A real MainWindow owns DocumentManager for file-name changes; keep this
+    // document's identity stable rather than constructing that private singleton.
+    const QString path = directory.filePath(QStringLiteral("ordinary.tmx"));
+    auto map = makeMap();
+    map->fileName = path;
+    MapDocument document(std::move(map));
     document.setWriterFormat(&format);
     auto layer = document.addLayer(Layer::TileLayerType);
     layer->setName(QStringLiteral("Saved ordinary layer"));
-    const QString path = directory.filePath(QStringLiteral("ordinary.tmx"));
     QString error;
     QVERIFY2(document.save(path, &error), qPrintable(error));
     QVERIFY(document.undoStack()->isClean());
