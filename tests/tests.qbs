@@ -4,6 +4,7 @@ Project {
     references: [
         "automapping",
         "layers",
+        "layerwidgets",
         "uistyle",
         "mapreader",
         "properties",

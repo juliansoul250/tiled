@@ -40,13 +40,60 @@ jobs:
           qbs config profiles.qt.baseProfile xcode
           qbs config --list
       - name: Build shared editor source and focused tests
-        run: qbs build profile:qt config:debug -p tiled,test_layers,test_uistyle
+        run: qbs build profile:qt config:debug -p tiled,test_layers,test_uistyle,test_layerwidgets
       - name: Run layer regressions
         run: qbs run profile:qt config:debug -p test_layers -- -o "$GITHUB_WORKSPACE/layers.txt,txt"
       - name: Run UI regressions at 1x and 2x
         run: |
           qbs run profile:qt config:debug -p test_uistyle -- -o "$GITHUB_WORKSPACE/uistyle-1x.txt,txt"
           QT_SCALE_FACTOR=2 qbs run profile:qt config:debug -p test_uistyle -- -o "$GITHUB_WORKSPACE/uistyle-2x.txt,txt"
+      - name: Run exposed Cocoa layer widgets (no offscreen fallback)
+        timeout-minutes: 5
+        env:
+          QT_QPA_PLATFORM: cocoa
+          TILED_REQUIRE_COCOA: '1'
+          QTEST_FUNCTION_TIMEOUT: '60000'
+          TILED_WIDGET_ARTIFACTS: ${{ github.workspace }}/native-widget-results
+        run: |
+          mkdir -p "$TILED_WIDGET_ARTIFACTS"
+          sw_vers > "$TILED_WIDGET_ARTIFACTS/environment.txt"
+          uname -m >> "$TILED_WIDGET_ARTIFACTS/environment.txt"
+          python3 - <<'PYTHON'
+          import os, pathlib, signal, subprocess, sys
+          out = pathlib.Path(os.environ['TILED_WIDGET_ARTIFACTS'])
+          command = ['qbs', 'run', 'profile:qt', 'config:debug', '-p', 'test_layerwidgets', '--',
+                     '-o', str(out / 'tests.txt') + ',txt',
+                     '-o', str(out / 'tests.xml') + ',junitxml']
+          with (out / 'console.txt').open('w') as log:
+              process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+              try:
+                  sys.exit(process.wait(timeout=180))
+              except subprocess.TimeoutExpired:
+                  os.killpg(process.pid, signal.SIGKILL)
+                  process.wait()
+                  log.write('\nNative widget test exceeded 180 seconds; infrastructure/test failure.\n')
+                  sys.exit(124)
+          PYTHON
+      - name: Collect native failure evidence from isolated runner
+        if: failure()
+        run: |
+          mkdir -p native-widget-results
+          screencapture -x native-widget-results/failure-desktop.png || true
+          python3 - <<'PYTHON'
+          import pathlib, shutil
+          reports = pathlib.Path.home() / 'Library/Logs/DiagnosticReports'
+          destination = pathlib.Path('native-widget-results')
+          if reports.exists():
+              for report in reports.glob('test_layerwidgets*'):
+                  if report.is_file() and report.suffix in ('.ips', '.crash'):
+                      shutil.copy2(report, destination / report.name)
+          PYTHON
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: macos-cocoa-widget-results
+          path: native-widget-results/
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v6
         if: always()
         with:
