@@ -1,16 +1,23 @@
 // Native-window coverage: deliberately complements, not replaces, model tests.
+#include "actionmanager.h"
+#include "mapdocumentactionhandler.h"
 #include "grouplayer.h"
 #include "layerdock.h"
 #include "layermodel.h"
 #include "map.h"
 #include "mapdocument.h"
 
+#include <QAction>
 #include <QApplication>
 #include <QDir>
 #include <QDockWidget>
 #include <QLineEdit>
 #include <QMainWindow>
+#include <QMenu>
 #include <QPointer>
+#include <QScopeGuard>
+#include <QTimer>
+#include <QToolButton>
 #include <QUndoStack>
 #include <QtTest>
 
@@ -23,6 +30,7 @@ private slots:
     void initTestCase();
     void renameAndSwitchDocument();
     void deleteNestedGroupsWithLiveView();
+    void newLayerPopupThroughRealDock();
 };
 
 static std::unique_ptr<Map> makeMap()
@@ -139,6 +147,117 @@ void test_LayerWidgets::deleteNestedGroupsWithLiveView()
         QCOMPARE(view.model()->rowCount(), 0);
     }
     view.setMapDocument(nullptr);
+}
+
+void test_LayerWidgets::newLayerPopupThroughRealDock()
+{
+    auto document = std::make_unique<MapDocument>(makeMap());
+    MapDocument other(makeMap());
+    MapDocumentActionHandler handler;
+    QMainWindow window;
+    // MainWindow normally registers this unrelated toolbar action. The fixture
+    // does not test highlighting; all New Layer actions/slots are production.
+    QAction highlight(&window);
+    highlight.setCheckable(true);
+    ActionManager::registerAction(&highlight, "HighlightCurrentLayer");
+    const auto unregister = qScopeGuard([&] {
+        ActionManager::unregisterAction(&highlight, "HighlightCurrentLayer");
+    });
+    auto dock = new LayerDock(&window);
+    window.addDockWidget(Qt::LeftDockWidgetArea, dock);
+    window.resize(640, 480);
+    handler.setMapDocument(document.get());
+    dock->setMapDocument(document.get());
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    window.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&window));
+
+    QToolButton *button = nullptr;
+    for (auto candidate : dock->findChildren<QToolButton *>()) {
+        if (candidate->popupMode() == QToolButton::InstantPopup && candidate->menu()) {
+            button = candidate;
+            break;
+        }
+    }
+    QVERIFY(button);
+    QMenu *menu = button->menu();
+    const QList<QAction *> actions = {handler.actionAddTileLayer(),
+                                      handler.actionAddObjectGroup(),
+                                      handler.actionAddImageLayer(),
+                                      handler.actionAddGroupLayer()};
+    const QList<Layer::TypeFlag> types = {Layer::TileLayerType, Layer::ObjectGroupType,
+                                         Layer::ImageLayerType, Layer::GroupLayerType};
+    QSignalSpy renameRequests(document.get(), &MapDocument::editLayerNameRequested);
+    QVERIFY(renameRequests.isValid());
+    for (int cycle = 0; cycle < 8; ++cycle) {
+        if (cycle == 4) {
+            dock->setFloating(true);
+            QVERIFY(dock->isFloating());
+            QVERIFY(QTest::qWaitForWindowExposed(dock));
+            dock->activateWindow();
+            QVERIFY(QTest::qWaitForWindowActive(dock));
+        }
+        QAction *action = actions.at(cycle % actions.size());
+        QVERIFY(action->isEnabled());
+        QSignalSpy triggered(action, &QAction::triggered);
+        bool sawVisiblePopup = false;
+        bool timerFired = false;
+        QTimer selectionTimer;
+        selectionTimer.setSingleShot(true);
+        // InstantPopup enters a nested event loop. Select via the actual menu,
+        // not QAction::trigger or direct MapDocument calls.
+        // A stack-owned timer disconnects on every return path, so no callback
+        // can retain references to this iteration after a failed assertion.
+        connect(&selectionTimer, &QTimer::timeout, &selectionTimer, [&, action, menu] {
+            sawVisiblePopup = menu->isVisible();
+            capture(*menu, QStringLiteral("new-layer-popup"));
+            menu->setActiveAction(action);
+            QTest::keyClick(menu, Qt::Key_Return);
+            menu->close(); // Bound dismissal even if a platform rejects Return.
+            timerFired = true;
+        });
+        selectionTimer.start(50);
+        QTest::mouseClick(button, Qt::LeftButton);
+        QTRY_VERIFY(timerFired);
+        QVERIFY2(sawVisiblePopup, "New Layer popup was not actually visible");
+        QCOMPARE(triggered.count(), 1);
+        QCOMPARE(renameRequests.count(), cycle + 1);
+        // addLayer inserts beside currentLayer (using its parentLayer), not
+        // inside a selected group. All menu-created layers here remain roots.
+        QVERIFY(!document->currentLayer()->parentLayer());
+        QCOMPARE(document->map()->layerCount(), cycle + 1);
+        QCOMPARE(document->currentLayer()->layerType(), types.at(cycle % types.size()));
+        QTRY_VERIFY(qobject_cast<QLineEdit *>(QApplication::focusWidget()));
+        auto editor = qobject_cast<QLineEdit *>(QApplication::focusWidget());
+        const QString originalName = document->currentLayer()->name();
+        const QString name = QStringLiteral("Menu layer %1").arg(cycle);
+        editor->selectAll();
+        QTest::keyClicks(editor, name);
+        capture(*dock, QStringLiteral("real-dock-inline-rename"));
+        if (cycle == 7) {
+            // Switch away while the popup-triggered rename editor is active.
+            handler.setMapDocument(&other);
+            dock->setMapDocument(&other);
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            QCoreApplication::processEvents();
+            QCOMPARE(other.map()->layerCount(), 0);
+            handler.setMapDocument(nullptr);
+            dock->setMapDocument(nullptr);
+            document.reset();
+        } else if (cycle % 2) {
+            QTest::keyClick(editor, Qt::Key_Escape);
+            QCOMPARE(document->currentLayer()->name(), originalName);
+        } else {
+            QTest::keyClick(editor, Qt::Key_Return);
+            QTRY_COMPARE(document->currentLayer()->name(), name);
+        }
+    }
+    dock->setFloating(false);
+    QVERIFY(!dock->isFloating());
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QCoreApplication::processEvents();
+    capture(window, QStringLiteral("real-dock-detached"));
 }
 
 QTEST_MAIN(test_LayerWidgets)
