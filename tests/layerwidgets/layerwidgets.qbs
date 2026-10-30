@@ -5,5 +5,6 @@ TiledTest {
     condition: project.nativeWidgetTests && qbs.targetOS.contains("macos")
     Depends { name: "libtilededitor" }
     Depends { name: "Qt.widgets" }
-    files: ["test_layerwidgets.cpp"]
+    cpp.frameworks: ["AppKit"]
+    files: ["test_layerwidgets.cpp", "nativeaccessibility.h", "nativeaccessibility.mm"]
 }

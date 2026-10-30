@@ -1,5 +1,11 @@
 # macOS / Windows installation handoff for this fork
 
+> **macOS installation hold (2026-10-30):** a supplied crash has now been
+> independently mapped to Qt 6.8.3's Cocoa accessibility column-cache teardown.
+> Do not package/install another Mac build with the historical Qt 6.8.3 kit below.
+> Native accessibility regression comparisons are in progress; a green rendering
+> test alone does not certify this crash path. No replacement kit is certified yet.
+
 Repository: https://github.com/juliansoul250/tiled
 Branch: **`fix/layer-stability-ui`**
 Base: Tiled **v1.12.2**, `1fd984638f9898af920103799bcd68b467287295`.

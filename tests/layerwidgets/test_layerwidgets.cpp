@@ -1,5 +1,6 @@
 // Native-window coverage: deliberately complements, not replaces, model tests.
 #include "actionmanager.h"
+#include "nativeaccessibility.h"
 #include "mapdocumentactionhandler.h"
 #include "grouplayer.h"
 #include "layerdock.h"
@@ -40,6 +41,8 @@ private slots:
     void deleteNestedGroupsWithLiveView();
     void newLayerPopupThroughRealDock();
     void nativeMaterialAndOpaqueFallback();
+    void nativeAccessibilityCacheLifecycle_data();
+    void nativeAccessibilityCacheLifecycle();
 };
 
 static std::unique_ptr<Map> makeMap()
@@ -400,6 +403,75 @@ void test_LayerWidgets::nativeMaterialAndOpaqueFallback()
     qunsetenv("TILED_DISABLE_NATIVE_GLASS");
     MacGlass::refresh(&window);
     QTRY_VERIFY(MacGlass::isActive(&window));
+}
+
+// Force the Cocoa AX arrays that mouse/keyboard-only tests never populated.
+void test_LayerWidgets::nativeAccessibilityCacheLifecycle_data()
+{
+    QTest::addColumn<bool>("glass");
+    QTest::newRow("no-glass-controller") << false;
+    QTest::newRow("native-glass") << true;
+}
+
+void test_LayerWidgets::nativeAccessibilityCacheLifecycle()
+{
+    QFETCH(bool, glass);
+    QMainWindow window;
+    auto dock = new QDockWidget(QStringLiteral("Accessible layers"), &window);
+    auto view = new LayerView(dock);
+    dock->setWidget(view);
+    window.addDockWidget(Qt::LeftDockWidgetArea, dock);
+    if (glass)
+        MacGlass::install(&window);
+    window.resize(700, 500);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    for (int cycle = 0; cycle < 40; ++cycle) {
+        auto document = std::make_unique<MapDocument>(makeMap());
+        auto first = document->addLayer(Layer::TileLayerType);
+        document->addLayer(Layer::ObjectGroupType);
+        document->groupLayers({first});
+        view->setMapDocument(document.get());
+        const auto detach = qScopeGuard([&] { view->setMapDocument(nullptr); });
+        view->expandAll();
+        QCoreApplication::processEvents();
+        auto counts = queryNativeAXThenMutate(&window, [&] {
+            document->removeLayers(document->map()->layers());
+        });
+        QVERIFY2(counts.tables > 0 && counts.rows > 0 && counts.cells > 0,
+                 "Native Cocoa AX table/cell traversal was not exercised");
+        document->undoStack()->undo();
+        view->expandAll();
+        queryNativeAXThenMutate(&window, [&] { document->undoStack()->redo(); });
+        document->undoStack()->undo();
+        view->expandAll();
+        queryNativeAXThenMutate(&window, [&] {
+            view->setMapDocument(nullptr);
+            document.reset();
+        });
+        qInfo() << "Native AX layer lifecycle" << cycle << "glass" << glass
+                << "tables/rows/cells" << counts.tables << counts.rows << counts.cells;
+    }
+    // QTBUG-134784's column-cache lifetime pattern, using an ordinary Qt model.
+    // This control separates framework cache teardown from Tiled's LayerModel.
+    auto table = new QTreeView(dock);
+    QStandardItemModel model(4, 4);
+    table->setModel(&model);
+    dock->setWidget(table);
+    for (int cycle = 0; cycle < 40; ++cycle) {
+        model.setColumnCount(4);
+        model.setRowCount(4);
+        for (int row = 0; row < 4; ++row)
+            for (int column = 0; column < 4; ++column)
+                model.setData(model.index(row, column), QStringLiteral("Cell %1,%2").arg(row).arg(column));
+        QCoreApplication::processEvents();
+        auto counts = queryNativeAXThenMutate(&window, [&] { model.setColumnCount(1); });
+        QVERIFY(counts.tables > 0 && counts.cells > 0);
+        queryNativeAXThenMutate(&window, [&] { model.clear(); });
+        qInfo() << "Native AX column reset" << cycle << "glass" << glass;
+    }
+    table->setModel(nullptr);
+    QVERIFY(window.close());
 }
 
 QTEST_MAIN(test_LayerWidgets)
