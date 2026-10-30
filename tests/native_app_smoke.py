@@ -11,7 +11,7 @@ import subprocess
 import time
 
 out = pathlib.Path(os.environ['TILED_WIDGET_ARTIFACTS'])
-apps = [p.resolve() for p in pathlib.Path('debug').rglob('Tiled.app')
+apps = [p.resolve() for p in pathlib.Path('debug/install-root').rglob('Tiled.app')
         if (p / 'Contents/MacOS/Tiled').is_file()]
 if len(apps) != 1:
     raise RuntimeError(f'Expected one built application, found {apps}')

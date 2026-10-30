@@ -8,6 +8,8 @@
 #include <QEvent>
 #include <QListView>
 #include <QPointer>
+#include <QPainter>
+#include <QPaintEvent>
 #include <QTableView>
 #include <QSurfaceFormat>
 #include <QScopedValueRollback>
@@ -43,6 +45,11 @@ public:
         report(QStringLiteral("installed-before-show=%1 visible=%2 is-window=%3 platform=%4")
                .arg(!window->isVisible()).arg(window->isVisible()).arg(window->isWindow())
                .arg(QGuiApplication::platformName()));
+        // Native child QWidget textures are cropped from the root backing
+        // store. Keep alpha there, but paint opaque everywhere except material
+        // docks below; never replace/reparent the Qt native content view.
+        window->setAttribute(Qt::WA_TranslucentBackground);
+        window->setAutoFillBackground(false);
         window->installEventFilter(this);
         connect(qApp, &QApplication::paletteChanged, this, [this] { schedule(); });
         const QPointer<Controller> guard(this);
@@ -170,11 +177,28 @@ public:
         report(QStringLiteral("enabled=%1 reduce-transparency=%2 env-disabled=%3 attached-docks=%4 root-content-unchanged=1")
                .arg(enabled).arg(reduce)
                .arg(qEnvironmentVariableIsSet("TILED_DISABLE_NATIVE_GLASS")).arg(attached));
+        mWindow->update(); // Refill old holes and clear newly material-backed docks.
     }
 
 protected:
-    bool eventFilter(QObject *, QEvent *event) override
+    bool eventFilter(QObject *watched, QEvent *event) override
     {
+        if (watched == mWindow && event->type() == QEvent::Paint) {
+            // Cocoa clears the alpha backing store's dirty region before paint.
+            // Retain the normal opaque palette (toolbars/canvas inherit it),
+            // filling the root except actual attached material dock rectangles.
+            QRegion opaque = static_cast<QPaintEvent *>(event)->region();
+            for (const auto &entry : mDocks) {
+                if (entry.dock && entry.dock->isVisible() && !entry.dock->isFloating()
+                        && entry.effect && [entry.effect superview] && ![entry.effect isHidden])
+                    opaque -= QRect(entry.dock->mapTo(mWindow, QPoint()), entry.dock->size());
+            }
+            QPainter painter(mWindow);
+            painter.setClipRegion(opaque);
+            painter.fillRect(mWindow->rect(), mWindow->palette().brush(QPalette::Window));
+            // Let normal QMainWindow/child painting proceed after painter ends.
+            return false;
+        }
         switch (event->type()) {
         case QEvent::Show:
         case QEvent::Hide:
@@ -275,6 +299,10 @@ void install(QWidget *window)
 {
     if (!window || QGuiApplication::platformName() != QLatin1String("cocoa"))
         return;
+    if (window->isVisible() && !window->testAttribute(Qt::WA_TranslucentBackground)) {
+        window->setProperty("tiledNativeGlassState", QStringLiteral("installation-rejected: already-visible-without-alpha"));
+        return;
+    }
     if (!controller(window))
         new Controller(window);
 }
