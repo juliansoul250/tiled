@@ -33,7 +33,9 @@ DynamicLibrary {
         }
         return flags;
     }
-    cpp.visibility: "minimal"
+    // Normal builds retain the existing exported API. Diagnostic widget tests
+    // need direct access to internal views without changing production headers.
+    cpp.visibility: project.nativeWidgetTests ? "default" : "minimal"
 
     cpp.defines: {
         var defs = [

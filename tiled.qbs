@@ -10,6 +10,8 @@ Project {
     property bool snapshot: Environment.getEnv("TILED_SNAPSHOT") == "true"
     property bool release: Environment.getEnv("TILED_RELEASE") == "true"
     property string libDir: "lib"
+    // Opt-in diagnostics only: expose editor internals for native widget tests.
+    property bool nativeWidgetTests: false
     property bool installHeaders: false
     property bool useRPaths: true
     property bool windowsInstaller: false

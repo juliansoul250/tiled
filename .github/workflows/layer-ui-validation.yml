@@ -40,13 +40,13 @@ jobs:
           qbs config profiles.qt.baseProfile xcode
           qbs config --list
       - name: Build shared editor source and focused tests
-        run: qbs build profile:qt config:debug -p tiled,test_layers,test_uistyle,test_layerwidgets
+        run: qbs build profile:qt config:debug projects.Tiled.nativeWidgetTests:true -p tiled,test_layers,test_uistyle,test_layerwidgets
       - name: Run layer regressions
-        run: qbs run profile:qt config:debug -p test_layers -- -o "$GITHUB_WORKSPACE/layers.txt,txt"
+        run: qbs run profile:qt config:debug projects.Tiled.nativeWidgetTests:true -p test_layers -- -o "$GITHUB_WORKSPACE/layers.txt,txt"
       - name: Run UI regressions at 1x and 2x
         run: |
-          qbs run profile:qt config:debug -p test_uistyle -- -o "$GITHUB_WORKSPACE/uistyle-1x.txt,txt"
-          QT_SCALE_FACTOR=2 qbs run profile:qt config:debug -p test_uistyle -- -o "$GITHUB_WORKSPACE/uistyle-2x.txt,txt"
+          qbs run profile:qt config:debug projects.Tiled.nativeWidgetTests:true -p test_uistyle -- -o "$GITHUB_WORKSPACE/uistyle-1x.txt,txt"
+          QT_SCALE_FACTOR=2 qbs run profile:qt config:debug projects.Tiled.nativeWidgetTests:true -p test_uistyle -- -o "$GITHUB_WORKSPACE/uistyle-2x.txt,txt"
       - name: Run exposed Cocoa layer widgets (no offscreen fallback)
         timeout-minutes: 5
         env:
@@ -61,7 +61,7 @@ jobs:
           python3 - <<'PYTHON'
           import os, pathlib, signal, subprocess, sys
           out = pathlib.Path(os.environ['TILED_WIDGET_ARTIFACTS'])
-          command = ['qbs', 'run', 'profile:qt', 'config:debug', '-p', 'test_layerwidgets', '--',
+          command = ['qbs', 'run', 'profile:qt', 'config:debug', 'projects.Tiled.nativeWidgetTests:true', '-p', 'test_layerwidgets', '--',
                      '-o', str(out / 'tests.txt') + ',txt',
                      '-o', str(out / 'tests.xml') + ',junitxml']
           with (out / 'console.txt').open('w') as log:
