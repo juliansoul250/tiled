@@ -12,6 +12,7 @@ DEPLOY="$QT_ROOT_DIR/bin/macdeployqt"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/tiled-package.XXXXXXXX")
 export TILED_PACKAGE_WORK="$WORK"
 echo "Fresh package workspace: $WORK"
+python3 "$ROOT/tests/test_macos_package_audit.py"
 qbs setup-toolchains --detect
 qbs setup-qt "$QMAKE" tiled-package-6113
 qbs config profiles.tiled-package-6113.baseProfile xcode
@@ -19,7 +20,21 @@ qbs install -f "$ROOT/tiled.qbs" -d "$WORK/build" --install-root "$WORK/stage" \
     profile:tiled-package-6113 config:release qbs.installPrefix:"" \
     projects.Tiled.nativeWidgetTests:false products.python.condition:false
 APP="$WORK/stage/Tiled.app"
-"$DEPLOY" "$APP" -verbose=2
+# Debug-symbol bundles are not loadable plug-ins. Preserve them outside the app
+# so macdeployqt/codesign do not mistake their DWARF payloads for runtime dylibs.
+python3 - "$APP" "$WORK/symbols" <<'PYTHON'
+import pathlib, shutil, sys
+app, symbols = map(pathlib.Path, sys.argv[1:])
+for bundle in list(app.rglob('*.dSYM')):
+    destination = symbols / bundle.relative_to(app)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(bundle), str(destination))
+PYTHON
+"$DEPLOY" "$APP" -verbose=2 2>&1 | tee "$WORK/macdeployqt.log"
+if grep -q '^[[:space:]]*ERROR:' "$WORK/macdeployqt.log"; then
+    echo "macdeployqt reported an error; see $WORK/macdeployqt.log" >&2
+    exit 1
+fi
 (cd "$WORK/stage" && ruby "$ROOT/dist/macos/fixup-install-names.rb")
 cp "$ROOT"/AUTHORS "$ROOT"/COPYING "$ROOT"/LICENSE.* "$APP/Contents/Resources/"
 python3 "$ROOT/dist/macos/verify-fork-package.py" "$APP" "$QT_ROOT_DIR" "$ROOT"

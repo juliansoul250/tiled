@@ -43,7 +43,18 @@ for binary in app.rglob('*'):
         continue
     if 'Mach-O' not in run('file', '-b', str(binary)):
         continue
-    dependencies = run('otool', '-L', str(binary)).splitlines()[1:]
+    # Universal files have one header per architecture. Recognize headers
+    # explicitly; an unexpected otool diagnostic is not silently discarded.
+    dependencies = []
+    headers = 0
+    for line in run('otool', '-L', str(binary)).splitlines():
+        if line.startswith(('\t', ' ')):
+            dependencies.append(line)
+        elif line.strip():
+            require(re.fullmatch(re.escape(str(binary)) + r'( \(architecture [^)]+\))?:', line.strip()),
+                    ('Unexpected otool output', binary, line))
+            headers += 1
+    require(headers and dependencies, ('No loadable Mach-O dependency output', binary))
     for line in dependencies:
         dependency = line.strip().split(' (')[0]
         require(dependency.startswith(('@rpath/', '@loader_path/', '@executable_path/', '/System/Library/', '/usr/lib/')), (binary, dependency))
@@ -56,7 +67,11 @@ for binary in app.rglob('*'):
     for i, line in enumerate(loads):
         if line.strip() == 'cmd LC_RPATH':
             path = loads[i + 2].strip().split('path ', 1)[1].split(' (offset')[0]
-            require(path.startswith(('@loader_path', '@executable_path')), (binary, path))
+            prefix = '@loader_path' if path.startswith('@loader_path') else '@executable_path'
+            require(path == prefix or path.startswith(prefix + '/'), (binary, path))
+            anchor = binary.parent if prefix == '@loader_path' else app / 'Contents/MacOS'
+            resolved = (anchor / path[len(prefix):].lstrip('/')).resolve()
+            require(resolved.is_relative_to(app) and resolved.is_dir(), (binary, path, resolved))
     checked.append(str(binary.relative_to(app)))
 identity = {'source_commit': run('git', '-C', str(source), 'rev-parse', 'HEAD'), 'source_dirty': bool(run('git', '-C', str(source), 'status', '--porcelain', '--untracked-files=no')), 'qt_version': expected, 'qt_kit': str(kit), 'cocoa_plugin_uuids': cocoa_uuids, 'qmake': str(kit / 'bin/qmake'), 'macdeployqt': str(kit / 'bin/macdeployqt'), 'built_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'macos': run('sw_vers'), 'architecture': run('uname', '-m'), 'signing': 'ad-hoc; NOT Developer ID signed or notarized', 'qt_frameworks': sorted((p.name for p in frameworks)), 'audited_macho_files': checked}
 (app / 'Contents/Resources/fork-build.json').write_text(json.dumps(identity, indent=2) + '\n')
