@@ -55,6 +55,7 @@
 #include "newsbutton.h"
 #include "newtilesetdialog.h"
 #include "offsetmapdialog.h"
+#include "popupwidget.h"
 #include "projectdock.h"
 #include "projectmanager.h"
 #include "projectpropertiesdialog.h"
