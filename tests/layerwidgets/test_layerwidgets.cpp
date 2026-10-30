@@ -175,7 +175,12 @@ void test_LayerWidgets::newLayerPopupThroughRealDock()
 
     QToolButton *button = nullptr;
     for (auto candidate : dock->findChildren<QToolButton *>()) {
-        if (candidate->popupMode() == QToolButton::InstantPopup && candidate->menu()) {
+        // QToolBar also owns an InstantPopup overflow-extension button.
+        // Identify the production New Layer button by its real menu actions,
+        // not QObject child order (the extension menu may be empty/hidden).
+        if (candidate->popupMode() == QToolButton::InstantPopup && candidate->menu()
+                && candidate->menu()->actions().contains(handler.actionAddTileLayer())
+                && candidate->menu()->actions().contains(handler.actionAddGroupLayer())) {
             button = candidate;
             break;
         }
@@ -198,7 +203,14 @@ void test_LayerWidgets::newLayerPopupThroughRealDock()
             dock->activateWindow();
             QVERIFY(QTest::qWaitForWindowActive(dock));
         }
+        QTRY_VERIFY(button->isVisible());
+        QVERIFY(button->isEnabled());
+        QVERIFY(button->rect().isValid());
+        qInfo() << "Popup cycle" << cycle << "button" << button->objectName()
+                << "geometry" << button->geometry() << "actions" << menu->actions().size();
+        capture(*dock, QStringLiteral("real-dock-before-popup"));
         QAction *action = actions.at(cycle % actions.size());
+        QVERIFY(menu->actions().contains(action));
         QVERIFY(action->isEnabled());
         QSignalSpy triggered(action, &QAction::triggered);
         bool sawVisiblePopup = false;
@@ -218,7 +230,7 @@ void test_LayerWidgets::newLayerPopupThroughRealDock()
             timerFired = true;
         });
         selectionTimer.start(50);
-        QTest::mouseClick(button, Qt::LeftButton);
+        QTest::mouseClick(button, Qt::LeftButton, Qt::NoModifier, button->rect().center());
         QTRY_VERIFY(timerFired);
         QVERIFY2(sawVisiblePopup, "New Layer popup was not actually visible");
         QCOMPARE(triggered.count(), 1);
