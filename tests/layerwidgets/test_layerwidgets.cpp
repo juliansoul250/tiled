@@ -4,6 +4,9 @@
 #include "grouplayer.h"
 #include "layerdock.h"
 #include "layermodel.h"
+#include "macosglass.h"
+#include "preferences.h"
+#include "stylehelper.h"
 #include "map.h"
 #include "mapdocument.h"
 
@@ -12,7 +15,12 @@
 #include <QDir>
 #include <QDockWidget>
 #include <QLineEdit>
+#include <QImage>
+#include <QStyle>
 #include <QMainWindow>
+#include <QScreen>
+#include <QStandardItemModel>
+#include <QTreeView>
 #include <QMenu>
 #include <QPointer>
 #include <QScopeGuard>
@@ -31,6 +39,7 @@ private slots:
     void renameAndSwitchDocument();
     void deleteNestedGroupsWithLiveView();
     void newLayerPopupThroughRealDock();
+    void nativeMaterialAndOpaqueFallback();
 };
 
 static std::unique_ptr<Map> makeMap()
@@ -53,6 +62,9 @@ static void capture(QWidget &window, const QString &name)
 
 void test_LayerWidgets::initTestCase()
 {
+    Preferences::instance()->setApplicationStyle(Preferences::TiledStyle);
+    StyleHelper::initialize();
+    qInfo() << "Editor theme:" << QApplication::style()->objectName();
     qInfo() << "Native platform:" << QGuiApplication::platformName()
             << "Qt:" << qVersion();
     if (qEnvironmentVariableIsSet("TILED_REQUIRE_COCOA"))
@@ -71,6 +83,7 @@ void test_LayerWidgets::renameAndSwitchDocument()
     window.addDockWidget(Qt::LeftDockWidgetArea, dock);
     window.resize(640, 480);
     view->setMapDocument(first.get());
+    MacGlass::install(&window);
     window.show();
     QVERIFY2(QTest::qWaitForWindowExposed(&window), "Real window was not exposed; no offscreen fallback allowed");
     window.activateWindow();
@@ -168,6 +181,7 @@ void test_LayerWidgets::newLayerPopupThroughRealDock()
     window.resize(640, 480);
     handler.setMapDocument(document.get());
     dock->setMapDocument(document.get());
+    MacGlass::install(&window);
     window.show();
     QVERIFY(QTest::qWaitForWindowExposed(&window));
     window.activateWindow();
@@ -202,6 +216,8 @@ void test_LayerWidgets::newLayerPopupThroughRealDock()
             QVERIFY(QTest::qWaitForWindowExposed(dock));
             dock->activateWindow();
             QVERIFY(QTest::qWaitForWindowActive(dock));
+            QVERIFY(!MacGlass::isActive(dock));
+            QTRY_COMPARE(dock->palette().color(QPalette::Window).alpha(), 255);
         }
         QTRY_VERIFY(button->isVisible());
         QVERIFY(button->isEnabled());
@@ -270,6 +286,101 @@ void test_LayerWidgets::newLayerPopupThroughRealDock()
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     QCoreApplication::processEvents();
     capture(window, QStringLiteral("real-dock-detached"));
+}
+
+// Use compositor pixels: QWidget::grab alone cannot capture an AppKit material
+// behind Qt. A changed backdrop must visibly change the empty sidebar while
+// the deliberately opaque canvas stays the same.
+void test_LayerWidgets::nativeMaterialAndOpaqueFallback()
+{
+    QWidget backdrop;
+    backdrop.setAutoFillBackground(true);
+    auto backdropPalette = backdrop.palette();
+    backdropPalette.setColor(QPalette::Window, QColor(210, 65, 45));
+    backdrop.setPalette(backdropPalette);
+    backdrop.resize(900, 700);
+    backdrop.move(80, 80);
+    backdrop.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&backdrop));
+
+    QMainWindow window;
+    auto canvas = new QWidget(&window);
+    canvas->setAutoFillBackground(true);
+    QPalette canvasPalette = QApplication::palette();
+    canvasPalette.setColor(QPalette::Window, QColor(35, 42, 49));
+    canvas->setPalette(canvasPalette);
+    window.setCentralWidget(canvas);
+    auto dock = new QDockWidget(QStringLiteral("Native material"), &window);
+    auto view = new QTreeView(dock);
+    QStandardItemModel model;
+    model.appendRow(new QStandardItem(QStringLiteral("Readable native sidebar")));
+    view->setModel(&model);
+    view->setHeaderHidden(true);
+    dock->setWidget(view);
+    dock->setMinimumWidth(260);
+    window.addDockWidget(Qt::LeftDockWidgetArea, dock);
+    window.resize(640, 480);
+    window.move(180, 160);
+    MacGlass::install(&window);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    window.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&window));
+    QTRY_VERIFY(MacGlass::isActive(&window));
+    QCOMPARE(canvas->palette().color(QPalette::Window).alpha(), 255);
+
+    const auto screenshot = [&](const QString &name) {
+        const QPoint position = window.mapToGlobal(QPoint());
+        QPixmap pixels = window.screen()->grabWindow(0, position.x(), position.y(),
+                                                     window.width(), window.height());
+        const QString directory = qEnvironmentVariable("TILED_WIDGET_ARTIFACTS");
+        if (!directory.isEmpty())
+            pixels.save(QDir(directory).filePath(name + QStringLiteral(".png")));
+        return pixels.toImage();
+    };
+    const auto sample = [&](const QImage &image, QWidget *target) {
+        const QPoint point = target->mapTo(&window, target->rect().center());
+        const int x = qBound(0, point.x() * image.width() / window.width(), image.width() - 1);
+        const int y = qBound(0, point.y() * image.height() / window.height(), image.height() - 1);
+        return image.pixelColor(x, y);
+    };
+    QTest::qWait(400); // Allow AppKit's asynchronous backdrop compositor to settle.
+    const auto red = screenshot(QStringLiteral("native-material-red-backdrop"));
+    QVERIFY2(!red.isNull(), "Compositor capture unavailable; native material not visually verified");
+    backdropPalette.setColor(QPalette::Window, QColor(45, 95, 215));
+    backdrop.setPalette(backdropPalette);
+    backdrop.repaint();
+    QTest::qWait(400);
+    const auto blue = screenshot(QStringLiteral("native-material-blue-backdrop"));
+    QVERIFY(!blue.isNull());
+    const QColor redSidebar = sample(red, view->viewport());
+    const QColor blueSidebar = sample(blue, view->viewport());
+    qInfo() << "Native material backdrop samples" << redSidebar << blueSidebar;
+    const int difference = qAbs(redSidebar.red() - blueSidebar.red())
+            + qAbs(redSidebar.green() - blueSidebar.green())
+            + qAbs(redSidebar.blue() - blueSidebar.blue());
+    QVERIFY2(difference > 3, "AppKit material is installed but no visible backdrop response was captured");
+    QCOMPARE(sample(red, canvas), sample(blue, canvas));
+
+    const QByteArray previous = qgetenv("TILED_DISABLE_NATIVE_GLASS");
+    const bool wasSet = qEnvironmentVariableIsSet("TILED_DISABLE_NATIVE_GLASS");
+    const auto restore = qScopeGuard([&] {
+        if (wasSet)
+            qputenv("TILED_DISABLE_NATIVE_GLASS", previous);
+        else
+            qunsetenv("TILED_DISABLE_NATIVE_GLASS");
+        MacGlass::refresh(&window);
+    });
+    qputenv("TILED_DISABLE_NATIVE_GLASS", "1");
+    MacGlass::refresh(&window);
+    QVERIFY(!MacGlass::isActive(&window));
+    QCOMPARE(window.palette().color(QPalette::Window).alpha(), 255);
+    QCOMPARE(view->palette().color(QPalette::Base).alpha(), 255);
+    QTest::qWait(200);
+    screenshot(QStringLiteral("native-material-opaque-fallback"));
+    qunsetenv("TILED_DISABLE_NATIVE_GLASS");
+    MacGlass::refresh(&window);
+    QTRY_VERIFY(MacGlass::isActive(&window));
 }
 
 QTEST_MAIN(test_LayerWidgets)

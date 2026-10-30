@@ -1,117 +1,130 @@
-# macOS and Windows source/build handoff
+# macOS / Windows installation handoff for this fork
 
-This branch contains the **shared C++/Qt editor source for both macOS and
-Windows**, not a Linux-only rewrite. Base: official `v1.12.2`, commit
-`1fd984638f9898af920103799bcd68b467287295`. The upstream Qbs project, macOS bundle
-resources/entitlements, Windows resources/installer definitions, AppVeyor, and
-existing GitHub workflows are retained unchanged.
+Repository: https://github.com/juliansoul250/tiled
+Branch: **`fix/layer-stability-ui`**
+Base: Tiled **v1.12.2**, `1fd984638f9898af920103799bcd68b467287295`.
 
-## Compatibility and verification status
+This is source code, **not a verified downloadable Mac installer**. There is no
+new signed/notarized release from this fork. Build on the secretary's Mac using
+the instructions below; record `git rev-parse HEAD` with any crash report.
+Do not disable Gatekeeper, SIP, code-signing checks, or other OS protections.
 
-Tiled v1.12.2 declares **Qt >= 5.15.2**, **Qbs >= 1.18**, and C++17. Do not infer a
-newer minimum from the moving master branch. Qt 6 is recommended for a new build;
-Qt 6.8.3 is the fixed version in the new optional validation workflow.
+## Changes and limits
 
-The production changes use existing cross-platform Qt APIs: QAbstractItemModel,
-QList/QHash, QPalette/QColor, QPainter/QPixmap, QStyle, and QSettings. No Linux
-system call, filesystem convention, platform-specific crash workaround, or
-conditional removal of a Mac/Windows feature was added. The source was reviewed
-for the declared Qt 5.15.2/Qt 6 API range. Linux Qt 6.8.2 debug builds and tests
-passed as described in `layer-stability-validation.md`. Native Qt 6.8.3 Qbs
-builds and focused tests also passed on **macOS arm64** and **Windows x86-64**
-(see the exact run below). Qt 5.15.2, Intel macOS, Windows ARM64, signed packaging,
-and interactive native-platform behavior remain unverified.
+- Donation entry in Help, donation button in About, and timed donation reminders
+  are removed, including their implementation and scheduling. Legacy settings
+  are no longer read for this purpose. **Original author/contributor attribution,
+  About copyright, AUTHORS, COPYING/GPL, and source license headers remain.**
+- macOS uses AppKit **NSVisualEffectView / sidebar material**, with behind-window
+  blending, beneath Qt's top-level content. Docked sidebar backgrounds expose
+  that material; map/document canvases remain opaque. This is genuine native
+  frosted vibrancy, **not macOS 26 Liquid Glass / NSGlassEffectView**.
+- Floating docks intentionally use an opaque fallback: Qt cannot safely change
+  an already-created native window's alpha format. Redocking restores sidebar
+  material. No Qt native content view is replaced or reparented.
+- macOS **Reduce Transparency** automatically selects the opaque path and is
+  observed for changes while running. An explicit launch fallback is
+  `TILED_DISABLE_NATIVE_GLASS=1 qbs run ... -p tiled`. This is also useful when
+  diagnosing remote-desktop/compositor problems. Ordinary non-Mac rendering is
+  unchanged; the AppKit implementation is not compiled on Windows/Linux.
+- Qt 6.8.3 is the CI version. With that kit, [macOS 12+ is the Qt-supported target](https://doc.qt.io/qt-6.8/macos.html);
+  this fork's native runtime tests use macOS 14.8.9 arm64. Intel Mac, older macOS,
+  Qt 5, signed deployment and physical Retina/GPU combinations are not certified.
 
-The shared new-user palette is only initialized for an empty settings profile;
-existing system/native/light preferences remain available. It does not replace
-native menus, keyboard shortcuts, or the map formats.
+## Mac: clone, build and launch locally
 
-## macOS: supported upstream Qbs path
-
-Prerequisites: Xcode/Command Line Tools, a compatible Qt desktop kit, and Qbs.
-The upstream README supports Homebrew (`brew install qbs qttools`, which also
-installs Qt), or use the official Qt installer to choose a fixed Qt version.
-Keep the Qt kit and compiler architecture consistent (Intel or Apple Silicon).
+Install Xcode Command Line Tools/Xcode, Qbs, and a matching **Qt 6.8.3 desktop
+macOS kit** (Widgets, QML, SVG and development tools) using the official Qt
+installer. Qbs may be installed via Homebrew (`brew install qbs`). A moving
+Homebrew Qt version is not the exact tested kit; do not silently mix kits.
 
 ```sh
-# From the checked-out source directory. Point this to YOUR installed Qt kit.
-export QTDIR=/absolute/path/to/Qt/6.8.3/macos
+git clone --branch fix/layer-stability-ui --single-branch \
+  https://github.com/juliansoul250/tiled.git
+cd tiled
+git rev-parse HEAD
+
+# Replace this path with the actual installed Qt 6.8.3 kit.
+export QTDIR="$HOME/Qt/6.8.3/macos"
 export PATH="$QTDIR/bin:$PATH"
+qmake -v
 qbs setup-toolchains --detect
 qbs setup-qt "$QTDIR/bin/qmake" tiled-qt
 qbs config profiles.tiled-qt.baseProfile xcode
-qbs build profile:tiled-qt config:debug
-QT_QPA_PLATFORM=offscreen qbs run profile:tiled-qt config:debug -p test_layers
-QT_QPA_PLATFORM=offscreen qbs run profile:tiled-qt config:debug -p test_uistyle
-qbs run profile:tiled-qt config:debug -p tiled
+qbs config --list
+
+# Normal production symbol visibility, not the diagnostic test configuration.
+qbs build profile:tiled-qt config:release products.python.condition:false
+qbs run profile:tiled-qt config:release products.python.condition:false -p tiled
 ```
 
-Check `qbs config --list` if the detected compiler profile is not named `xcode`,
-and substitute the returned profile name. To prepare an unsigned local app,
-follow the upstream `qbs install`/`macdeployqt` steps. Signing/notarization require
-the owner's Apple credentials and are **not performed or bypassed** here.
+Use the detected Apple compiler profile instead of `xcode` if the toolchain list
+uses another name. The Qt kit and compiler must match the machine's architecture.
+For daily use on the build machine, the `qbs run` command is the supported launch
+route and retains correct build-time library paths.
 
-## Windows: supported upstream Qbs path
+If a self-contained `.app` is needed, prepare it separately using the upstream
+packaging sequence: `qbs install --install-root local-install ...`, `macdeployqt`
+on the resulting `Tiled.app`, and the upstream install-name fixup. See
+`.github/workflows/packages.yml` for the complete platform packaging recipe.
+That deployment/signing/notarization sequence is **not validated by our focused
+CI**; do not present a raw build-folder `.app` as a tested portable installer.
+No signing certificate or Apple-account credentials are requested here.
 
-Install Visual Studio 2022 C++ desktop tools, the **matching MSVC2022 x64 Qt kit**
-(including its private development headers as required by the existing Windows
-Qbs configuration), and Qbs. Use a Developer PowerShell/command prompt. Do not
-mix a MinGW Qt kit with an MSVC compiler. The upstream project also supports a
-matching MinGW kit; its existing workflows remain present.
+## Mac: native diagnostic tests
+
+Run the model and drawing regressions in the ordinary configuration, or enable
+the additional internal-widget diagnostics in a separate configuration:
+
+```sh
+qbs build profile:tiled-qt config:native-check qbs.buildVariant:debug \
+  projects.Tiled.nativeWidgetTests:true -p tiled,test_layers,test_uistyle,test_layerwidgets
+QT_QPA_PLATFORM=cocoa TILED_REQUIRE_COCOA=1 \
+  TILED_WIDGET_ARTIFACTS="$PWD/native-widget-results" \
+  qbs run profile:tiled-qt config:native-check qbs.buildVariant:debug \
+  projects.Tiled.nativeWidgetTests:true -p test_layerwidgets
+```
+
+`nativeWidgetTests` is **off by default**. When explicitly enabled it exports
+internal editor symbols for tests; this diagnostic binary is not byte-identical
+to a normally packaged production binary. Tests require Cocoa and genuinely
+exposed/active windows; no offscreen fallback is accepted. They exercise actual
+LayerDock actions/menus, all four layer types, rename accept/cancel, document
+switch/detach, nested deletion/undo/redo, floating/redocking, and the themed
+material/opaque fallback. Compositor images with changing colored backgrounds
+are used to check visible material response and an unchanged opaque canvas.
+
+## Windows
+
+Use Visual Studio 2022 C++ desktop tools, Qbs and the matching Qt 6.8.3
+`msvc2022_64` kit (including the upstream-required private development headers).
+Run in a Developer PowerShell; do not mix MinGW and MSVC libraries.
 
 ```powershell
-# Set this to YOUR installed Qt kit.
 $QtDir = 'C:\Qt\6.8.3\msvc2022_64'
 $env:PATH = "$QtDir\bin;$env:PATH"
 qbs setup-toolchains --detect
 qbs setup-qt "$QtDir\bin\qmake.exe" tiled-qt
+# Substitute the actual detected MSVC x64 profile from qbs config --list.
 qbs config profiles.tiled-qt.baseProfile MSVC2022-x64
-qbs build profile:tiled-qt config:debug
-$env:QT_QPA_PLATFORM = 'offscreen'
-qbs run profile:tiled-qt config:debug -p test_layers
-qbs run profile:tiled-qt config:debug -p test_uistyle
-Remove-Item Env:QT_QPA_PLATFORM
-qbs run profile:tiled-qt config:debug -p tiled
+qbs build profile:tiled-qt config:release products.python.condition:false
+qbs run profile:tiled-qt config:release products.python.condition:false -p tiled
 ```
 
-Use the actual MSVC profile name printed by `qbs config --list` if different.
-Packaging/signing is separate from building the editor; no installer certificate
-or upstream release secret is included or requested by this patch.
+## Verification record
 
-## GitHub native verification
+Before the material/donation change, [run 41018503219](https://github.com/juliansoul250/tiled/actions/runs/41018503219)
+at `f00d5bd66cf86d250f6e5e18342cb1bbd92d7381` passed:
+- macOS 14.8.9 arm64 / Qt 6.8.3: Cocoa widget suite **5 passed** (three scenarios
+  plus setup/cleanup), eight actual popup/action cycles, no failures/skips.
+- macOS and Windows: layer **14/14**, drawing UI **38/38 at 1x and 2x**.
 
-`.github/workflows/layer-ui-validation.yml` supports manual `workflow_dispatch`
-and pushes **only to `fix/layer-stability-ui`** that change the workflow or build
-inputs (`tiled.qbs`, `qbs/`, `src/`, `tests/`, `dist/`, `translations/`). Doc-only
-pushes do not rerun it. It uses standard `macos-14` and `windows-2022` hosted runners,
-Qt 6.8.3, and Qbs. It builds the editor and focused layer/UI tests, then runs UI
-checks at 1x and 2x and uploads text test results. It has read-only repository
-permissions, no signing, no deployment, no release creation, and no secret
-inputs. Windows selects the actual installed MSVC x64 compiler using `vswhere`
-and registers a named Qbs profile instead of assuming an auto-detected profile
-name.
+Those are **pre-material** results, not evidence that the new visual change
+passed. Review the latest run for the exact installed commit and its compositor
+screenshots before treating the new material as verified. CI uses standard
+macOS/Windows hosted runners, with no purchase, deployment or notarization.
 
-[Run 40814104903](https://github.com/juliansoul250/tiled/actions/runs/40814104903)
-completed successfully on 2026-10-29 at commit
-`8ca31908816d677d103bce3c76700eeb079bfaea`:
-
-- macOS 14.8 / arm64, Xcode 15.4 / Apple LLVM 15, Qbs 3.3.1, Qt 6.8.3.
-- Windows Server 2022 / x86-64, MSVC 2022 toolset 14.44.35207, Qbs 3.3.0, Qt 6.8.3.
-- Each native job: shared editor debug build succeeded; layer suite **14/14**,
-  UI suite **38/38 at 1x and 38/38 at 2x**, with zero failures or skipped tests.
-
-The downloaded text artifacts confirm these counts. Offscreen UI tests have
-nonfatal font lookup warnings; these are not hidden. Exact logs, artifact links,
-and coverage limits are recorded in `layer-stability-validation.md`.
-This is actual native automated validation, not a claim that the user's old
-Mac crash was reproduced or that native interactive GUI checks were performed.
-
-The workflow intentionally runs focused regressions, not a replacement for all
-upstream tests. `layer-stability-validation.md` documents the unrelated existing
-Properties test failure and relative-path CLI issue rather than hiding them.
-
-After a native build, manually verify square/isometric/hex maps, all four layer
-types, grouping, delete/undo/redo, undo-branch replacement, save/reopen, light and
-dark themes, keyboard focus, retina/high-DPI, menu shortcuts, and native dialogs.
-Only after that validation should native interactive behavior be called tested.
-The CI run above does not package, sign, notarize, or publish binaries.
+Focused success does not reproduce or resolve an unidentified user Mac crash.
+Keep the `.ips`, exact commit/app version, macOS version and last action when
+reporting one. The unrelated baseline Properties test failure and full-suite
+limits remain documented in `layer-stability-validation.md`.

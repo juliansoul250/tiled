@@ -206,8 +206,6 @@ DynamicLibrary {
         "document.h",
         "documentmanager.cpp",
         "documentmanager.h",
-        "donationpopup.cpp",
-        "donationpopup.h",
         "editableasset.cpp",
         "editableasset.h",
         "editablegrouplayer.cpp",
@@ -302,6 +300,7 @@ DynamicLibrary {
         "magicwandtool.cpp",
         "maintoolbar.cpp",
         "maintoolbar.h",
+        "macosglass.h",
         "mainwindow.cpp",
         "mainwindow.h",
         "mainwindow.ui",
@@ -599,6 +598,18 @@ DynamicLibrary {
     ]
 
     Group {
+        name: "Native macOS material"
+        condition: qbs.targetOS.contains("macos")
+        files: ["macosglass.mm"]
+    }
+
+    Group {
+        name: "Native material fallback"
+        condition: !qbs.targetOS.contains("macos")
+        files: ["macosglass_stub.cpp"]
+    }
+
+    Group {
         name: "Resources"
         Qt.core.resourceSourceBase: "resources/"
         files: "resources/**"
@@ -616,6 +627,7 @@ DynamicLibrary {
 
     Properties {
         condition: qbs.targetOS.contains("macos")
+        cpp.frameworks: ["AppKit"]
         bundle.isBundle: false
         cpp.sonamePrefix: "@rpath"
     }

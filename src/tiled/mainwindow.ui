@@ -123,7 +123,6 @@
     <addaction name="actionDocumentation"/>
     <addaction name="actionForum"/>
     <addaction name="separator"/>
-    <addaction name="actionDonate"/>
     <addaction name="actionAbout"/>
    </widget>
    <widget class="QMenu" name="menuMap">
@@ -529,11 +528,6 @@
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+E</string>
-   </property>
-  </action>
-  <action name="actionDonate">
-   <property name="text">
-    <string>Support Tiled Development ↗</string>
    </property>
   </action>
   <action name="actionSaveAll">

@@ -151,13 +151,6 @@ public:
     QDate firstRun() const;
     int runCount() const;
 
-    bool isPatron() const;
-    void setPatron(bool isPatron);
-
-    bool shouldShowDonationReminder() const;
-    QDate donationReminderTime() const;
-    void setDonationReminder(const QDate &date);
-
     enum { MaxRecentFiles = 12 };
     void addRecentFile(const QString &fileName);
 
@@ -251,7 +244,6 @@ signals:
     // Call emitPropertyTypesChanged() to emit this signal!
     void propertyTypesChanged();
 
-    void isPatronChanged();
 
     void recentFilesChanged();
     void recentProjectsChanged();

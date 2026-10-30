@@ -178,7 +178,6 @@ private:
     void updateZoomActions();
     void openDocumentation();
     void openForum();
-    void showDonationPopup();
     void aboutTiled();
     void openRecentFile();
     void reopenClosedFile();

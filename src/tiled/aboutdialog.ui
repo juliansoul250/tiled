@@ -105,13 +105,6 @@
       </spacer>
      </item>
      <item>
-      <widget class="QPushButton" name="donateButton">
-       <property name="text">
-        <string>Donate ↗</string>
-       </property>
-      </widget>
-     </item>
-     <item>
       <widget class="QPushButton" name="okButton">
        <property name="text">
         <string>OK</string>

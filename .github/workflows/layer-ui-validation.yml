@@ -39,6 +39,8 @@ jobs:
           qbs setup-qt "$QT_ROOT_DIR/bin/qmake" qt
           qbs config profiles.qt.baseProfile xcode
           qbs config --list
+      - name: Verify donation UX removal and retained attribution
+        run: python tests/check_fork_ui_policy.py
       - name: Build shared editor source and focused tests
         run: qbs build profile:qt config:debug projects.Tiled.nativeWidgetTests:true -p tiled,test_layers,test_uistyle,test_layerwidgets
       - name: Run layer regressions
@@ -129,6 +131,8 @@ jobs:
           qbs setup-qt "$env:QT_ROOT_DIR\bin\qmake.exe" qt
           qbs config profiles.qt.baseProfile native-msvc
           qbs config --list
+      - name: Verify donation UX removal and retained attribution
+        run: python tests/check_fork_ui_policy.py
       - name: Build shared editor source and focused tests
         run: qbs build profile:qt config:debug -p tiled,test_layers,test_uistyle
       - name: Run layer regressions

@@ -36,13 +36,13 @@
 #include "commandmanager.h"
 #include "consoledock.h"
 #include "documentmanager.h"
-#include "donationpopup.h"
 #include "exportasimagedialog.h"
 #include "exporthelper.h"
 #include "issuescounter.h"
 #include "issuesdock.h"
 #include "layer.h"
 #include "locatorwidget.h"
+#include "macosglass.h"
 #include "map.h"
 #include "mapdocument.h"
 #include "mapdocumentactionhandler.h"
@@ -231,6 +231,8 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     Q_ASSERT(!mInstance);
     mInstance = this;
 
+    // Request alpha before restoreGeometry/restoreState can create a window.
+    MacGlass::install(this);
     mUi->setupUi(this);
 
     ActionManager::registerMenu(mUi->menuFile, "File");
@@ -263,7 +265,6 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     ActionManager::registerAction(mUi->actionCut, "Cut");
     ActionManager::registerAction(mUi->actionDelete, "Delete");
     ActionManager::registerAction(mUi->actionDocumentation, "Documentation");
-    ActionManager::registerAction(mUi->actionDonate, "Donate");
     ActionManager::registerAction(mUi->actionEditCommands, "EditCommands");
     ActionManager::registerAction(mUi->actionEnableParallax, "EnableParallax");
     ActionManager::registerAction(mUi->actionEnableWorlds, "EnableWorlds");
@@ -700,9 +701,6 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
 
     connect(mUi->actionDocumentation, &QAction::triggered, this, &MainWindow::openDocumentation);
     connect(mUi->actionForum, &QAction::triggered, this, &MainWindow::openForum);
-    connect(mUi->actionDonate, &QAction::triggered, this, [] {
-        QDesktopServices::openUrl(QUrl(QLatin1String("https://www.mapeditor.org/donate")));
-    });
     connect(mUi->actionAbout, &QAction::triggered, this, &MainWindow::aboutTiled);
     connect(mUi->actionAboutQt, &QAction::triggered, qApp, &QApplication::aboutQt);
 
@@ -900,15 +898,12 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     connect(preferences, &Preferences::recentFilesChanged, this, &MainWindow::updateRecentFilesMenu);
     connect(preferences, &Preferences::recentProjectsChanged, this, &MainWindow::updateRecentProjectsMenu);
 
-    QTimer::singleShot(500, this, [this,preferences] {
 #ifdef TILED_SENTRY
+    QTimer::singleShot(500, this, [this] {
         if (Sentry::instance()->userConsent() == Sentry::ConsentUnknown)
             openCrashReporterPopup();
-#endif
-
-        if (preferences->shouldShowDonationReminder())
-            showDonationPopup();
     });
+#endif
 }
 
 MainWindow::~MainWindow()
@@ -2345,13 +2340,6 @@ void MainWindow::updateWindowTitle()
     }
 }
 
-void MainWindow::showDonationPopup()
-{
-    if (mPopupWidget)
-        return;
-
-    showPopup(new DonationPopup(this));
-}
 
 void MainWindow::aboutTiled()
 {

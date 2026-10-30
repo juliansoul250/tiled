@@ -33,8 +33,6 @@ class AboutDialog : public QDialog, private Ui::AboutDialog
 public:
     AboutDialog(QWidget *parent = nullptr);
 
-private:
-    void donate();
 };
 
 } // namespace Tiled

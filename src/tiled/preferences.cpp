@@ -135,21 +135,9 @@ void Preferences::initialize()
         pluginManager->setPluginState(fileName, PluginEnabled);
 
     // Keeping track of some usage information
-    if (contains(QLatin1String("Install/PatreonDialogTime"))) {
-        setValue(QLatin1String("Install/DonationDialogTime"), value(QLatin1String("Install/PatreonDialogTime")));
-        remove(QLatin1String("Install/PatreonDialogTime"));
-    }
-
     if (!firstRun().isValid())
         setValue(QLatin1String("Install/FirstRun"), QDate::currentDate().toString(Qt::ISODate));
 
-    if (!contains(QLatin1String("Install/DonationDialogTime"))) {
-        QDate donationDialogTime = firstRun().addMonths(1);
-        const QDate today(QDate::currentDate());
-        if (donationDialogTime.daysTo(today) >= 0)
-            donationDialogTime = today.addDays(2);
-        setValue(QLatin1String("Install/DonationDialogTime"), donationDialogTime.toString(Qt::ISODate));
-    }
     setValue(QLatin1String("Install/RunCount"), runCount() + 1);
 
     const auto oldGridMajorKey = QStringLiteral("Interface/GridMajor");
@@ -579,43 +567,6 @@ QDate Preferences::firstRun() const
 int Preferences::runCount() const
 {
     return get<int>("Install/RunCount", 0);
-}
-
-bool Preferences::isPatron() const
-{
-    return get("Install/IsPatron", false);
-}
-
-void Preferences::setPatron(bool isPatron)
-{
-    setValue(QLatin1String("Install/IsPatron"), isPatron);
-    emit isPatronChanged();
-}
-
-bool Preferences::shouldShowDonationReminder() const
-{
-    if (isPatron())
-        return false;
-    if (runCount() < 7)
-        return false;
-
-    const QDate dialogTime = donationReminderTime();
-    if (!dialogTime.isValid())
-        return false;
-
-    return dialogTime.daysTo(QDate::currentDate()) >= 0;
-}
-
-QDate Preferences::donationReminderTime() const
-{
-    return get<QDate>("Install/DonationDialogTime");
-}
-
-void Preferences::setDonationReminder(const QDate &date)
-{
-    if (date.isValid())
-        setPatron(false);
-    setValue(QLatin1String("Install/DonationDialogTime"), date.toString(Qt::ISODate));
 }
 
 /**

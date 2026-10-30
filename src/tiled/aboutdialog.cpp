@@ -28,7 +28,6 @@
 
 #include <QAbstractTextDocumentLayout>
 #include <QApplication>
-#include <QDesktopServices>
 
 #include <cmath>
 
@@ -59,16 +58,10 @@ AboutDialog::AboutDialog(QWidget *parent): QDialog(parent)
         if (style->isDark())
             logo->setPixmap(QPixmap(QString::fromUtf8(":/images/about-tiled-logo-white.png")));
 
-    connect(donateButton, &QAbstractButton::clicked, this, &AboutDialog::donate);
-
     // Manual refresh to update the NewVersionButton in this dialog, in case
     // automatic checking was disabled.
     tiledApp()->newVersionChecker().refresh();
 }
 
-void AboutDialog::donate()
-{
-    QDesktopServices::openUrl(QUrl(QLatin1String("https://www.mapeditor.org/donate")));
-}
 
 #include "moc_aboutdialog.cpp"
