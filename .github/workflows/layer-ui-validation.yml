@@ -19,20 +19,13 @@ permissions:
 
 jobs:
   macos:
-    runs-on: macos-14
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - qt: '6.8.3'
-            reference: true
-          - qt: '6.9.1'
-            reference: false
-          - qt: '6.11.3'
-            reference: false
-    # Vulnerable historical baseline is diagnostic, never an approved SDK.
-    continue-on-error: ${{ matrix.reference }}
-    timeout-minutes: 40
+        os: [macos-14, xcode-27]
+        qt: ['6.11.3']
+    timeout-minutes: 60
     env:
       QT_QPA_PLATFORM: offscreen
     steps:
@@ -62,9 +55,10 @@ jobs:
           qbs run profile:qt config:debug projects.Tiled.nativeWidgetTests:true -p test_uistyle -- -o "$GITHUB_WORKSPACE/uistyle-1x.txt,txt"
           QT_SCALE_FACTOR=2 qbs run profile:qt config:debug projects.Tiled.nativeWidgetTests:true -p test_uistyle -- -o "$GITHUB_WORKSPACE/uistyle-2x.txt,txt"
       - name: Run exposed Cocoa layer widgets (no offscreen fallback)
-        timeout-minutes: 10
+        timeout-minutes: 30
         env:
           QT_QPA_PLATFORM: cocoa
+          TILED_RUN_SOAK: ${{ matrix.os == 'xcode-27' }}
           TILED_REQUIRE_COCOA: '1'
           QTEST_FUNCTION_TIMEOUT: '60000'
           TILED_WIDGET_ARTIFACTS: ${{ github.workspace }}/native-widget-results
@@ -72,6 +66,7 @@ jobs:
           mkdir -p "$TILED_WIDGET_ARTIFACTS"
           sw_vers > "$TILED_WIDGET_ARTIFACTS/environment.txt"
           uname -m >> "$TILED_WIDGET_ARTIFACTS/environment.txt"
+          xcodebuild -version >> "$TILED_WIDGET_ARTIFACTS/environment.txt"
           python3 - <<'PYTHON'
           import os, pathlib, signal, subprocess, sys
           out = pathlib.Path(os.environ['TILED_WIDGET_ARTIFACTS'])
@@ -112,6 +107,8 @@ jobs:
               subprocess.run(['defaults', 'write', *preference, '-bool', 'false'], check=True, timeout=15)
               run_test('tests')
               subprocess.run(['python3', 'tests/native_app_smoke.py'], check=True, timeout=150)
+              if os.environ.get('TILED_RUN_SOAK') == 'true':
+                  subprocess.run(['python3', 'tests/native_stability_soak.py'], check=True, timeout=1170)
           finally:
               if old is None:
                   subprocess.run(['defaults', 'delete', *preference], check=True, timeout=15)
@@ -141,13 +138,13 @@ jobs:
       - uses: actions/upload-artifact@v6
         if: always()
         with:
-          name: macos-cocoa-widget-results-qt${{ matrix.qt }}
+          name: ${{ matrix.os }}-cocoa-widget-results-qt${{ matrix.qt }}
           path: native-widget-results/
           if-no-files-found: warn
       - uses: actions/upload-artifact@v6
         if: always()
         with:
-          name: macos-layer-ui-results-qt${{ matrix.qt }}
+          name: ${{ matrix.os }}-layer-ui-results-qt${{ matrix.qt }}
           path: |
             layers.txt
             uistyle-*.txt
@@ -197,4 +194,39 @@ jobs:
           path: |
             layers.txt
             uistyle-*.txt
+          if-no-files-found: warn
+
+  macos-package:
+    needs: [macos, windows]
+    runs-on: xcode-27
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.11.3'
+          arch: clang_64
+          modules: qtimageformats
+          cache: true
+      - name: Install Qbs
+        run: |
+          brew install qbs
+          echo "$(brew --prefix qbs)/bin" >> "$GITHUB_PATH"
+      - name: Build production app, audit deployment and smoke relocated bundle
+        env:
+          TILED_WIDGET_ARTIFACTS: ${{ github.workspace }}/package-results
+          TILED_SMOKE_SECONDS: '900'
+        run: python3 tests/with_native_transparency.py bash dist/macos/build-fork-package.sh
+      - uses: actions/upload-artifact@v6
+        with:
+          name: Tiled-macOS-Qt6.11.3-ad-hoc
+          path: |
+            Tiled-macOS-Qt6.11.3-ad-hoc.zip
+            Tiled-macOS-Qt6.11.3-ad-hoc.zip.sha256
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: macos-deployed-app-validation
+          path: package-results/
           if-no-files-found: warn

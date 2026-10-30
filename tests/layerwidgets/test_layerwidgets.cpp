@@ -10,6 +10,10 @@
 #include "stylehelper.h"
 #include "map.h"
 #include "mapdocument.h"
+#include "tmxmapformat.h"
+#include "pluginmanager.h"
+#include <QTemporaryDir>
+#include <QElapsedTimer>
 
 #include <QAction>
 #include <QApplication>
@@ -35,8 +39,12 @@ using namespace Tiled;
 class test_LayerWidgets : public QObject
 {
     Q_OBJECT
+private:
+    void exerciseNativeAccessibility(bool glass);
 private slots:
     void initTestCase();
+    void continuousNativeStability();
+    void saveAndReopenOrdinaryMap();
     void renameAndSwitchDocument();
     void deleteNestedGroupsWithLiveView();
     void newLayerPopupThroughRealDock();
@@ -72,6 +80,62 @@ void test_LayerWidgets::initTestCase()
             << "Qt:" << qVersion();
     if (qEnvironmentVariableIsSet("TILED_REQUIRE_COCOA"))
         QCOMPARE(QGuiApplication::platformName(), QStringLiteral("cocoa"));
+}
+
+void test_LayerWidgets::continuousNativeStability()
+{
+    // Ordinary runs keep this quick; the dedicated CI soak enables 15 minutes.
+    if (!qEnvironmentVariableIsSet("TILED_LONG_NATIVE_SOAK"))
+        return;
+    QElapsedTimer elapsed;
+    elapsed.start();
+    int cycles = 0;
+    do {
+        renameAndSwitchDocument();
+        QVERIFY(!QTest::currentTestFailed());
+        deleteNestedGroupsWithLiveView();
+        QVERIFY(!QTest::currentTestFailed());
+        newLayerPopupThroughRealDock();
+        QVERIFY(!QTest::currentTestFailed());
+        nativeMaterialAndOpaqueFallback();
+        QVERIFY(!QTest::currentTestFailed());
+        saveAndReopenOrdinaryMap();
+        QVERIFY(!QTest::currentTestFailed());
+        exerciseNativeAccessibility(false);
+        QVERIFY(!QTest::currentTestFailed());
+        exerciseNativeAccessibility(true);
+        QVERIFY(!QTest::currentTestFailed());
+        qInfo() << "Continuous native soak cycle" << ++cycles << "elapsed ms" << elapsed.elapsed();
+    } while (elapsed.elapsed() < 900000);
+}
+
+void test_LayerWidgets::saveAndReopenOrdinaryMap()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    TmxMapFormat format;
+    PluginManager::instance();
+    PluginManager::addObject(&format);
+    const auto removeFormat = qScopeGuard([&] { PluginManager::removeObject(&format); });
+    MapDocument document(makeMap());
+    document.setWriterFormat(&format);
+    auto layer = document.addLayer(Layer::TileLayerType);
+    layer->setName(QStringLiteral("Saved ordinary layer"));
+    const QString path = directory.filePath(QStringLiteral("ordinary.tmx"));
+    QString error;
+    QVERIFY2(document.save(path, &error), qPrintable(error));
+    QVERIFY(document.undoStack()->isClean());
+    auto reopened = MapDocument::load(path, &format, &error);
+    QVERIFY2(reopened, qPrintable(error));
+    QCOMPARE(reopened->map()->layerCount(), 1);
+    QCOMPARE(reopened->map()->layerAt(0)->name(), QStringLiteral("Saved ordinary layer"));
+    QCOMPARE(reopened->map()->width(), 16);
+    QCOMPARE(reopened->map()->height(), 16);
+    reopened->addLayer(Layer::ObjectGroupType);
+    QVERIFY2(reopened->save(path, &error), qPrintable(error));
+    auto twice = MapDocument::load(path, &format, &error);
+    QVERIFY2(twice, qPrintable(error));
+    QCOMPARE(twice->map()->layerCount(), 2);
 }
 
 void test_LayerWidgets::renameAndSwitchDocument()
@@ -416,6 +480,11 @@ void test_LayerWidgets::nativeAccessibilityCacheLifecycle_data()
 void test_LayerWidgets::nativeAccessibilityCacheLifecycle()
 {
     QFETCH(bool, glass);
+    exerciseNativeAccessibility(glass);
+}
+
+void test_LayerWidgets::exerciseNativeAccessibility(bool glass)
+{
     QMainWindow window;
     auto dock = new QDockWidget(QStringLiteral("Accessible layers"), &window);
     auto view = new LayerView(dock);

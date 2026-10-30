@@ -1,18 +1,19 @@
 # macOS / Windows installation handoff for this fork
 
-> **macOS installation hold (2026-10-30):** a supplied crash has now been
-> independently mapped to Qt 6.8.3's Cocoa accessibility column-cache teardown.
-> Do not package/install another Mac build with the historical Qt 6.8.3 kit below.
-> Native accessibility regression comparisons are in progress; a green rendering
-> test alone does not certify this crash path. No replacement kit is certified yet.
+> **Mac SDK selection (2026-10-30):** use the complete **Qt 6.11.3** kit.
+> Do not rebuild this fork with Qt 6.8.3: native accessibility stress reproduces
+> a crash on that historical kit; the user's matching plugin independently maps
+> to the known cache teardown. Qt 6.11.3 passed the targeted native
+> regression. Final packaged-app validation is a separate required gate below;
+> a passed source test does not mean every possible crash is fixed.
 
 Repository: https://github.com/juliansoul250/tiled
 Branch: **`fix/layer-stability-ui`**
 Base: Tiled **v1.12.2**, `1fd984638f9898af920103799bcd68b467287295`.
 
 This is source code, **not a verified downloadable Mac installer**. There is no
-new signed/notarized release from this fork. Build on the secretary's Mac using
-the instructions below; record `git rev-parse HEAD` with any crash report.
+new signed/notarized release from this fork. Use only an artifact from a successful exact-commit validation run, or build
+locally below; record `git rev-parse HEAD` with any crash report.
 Do not disable Gatekeeper, SIP, code-signing checks, or other OS protections.
 
 ## Changes and limits
@@ -33,49 +34,73 @@ Do not disable Gatekeeper, SIP, code-signing checks, or other OS protections.
   `TILED_DISABLE_NATIVE_GLASS=1 qbs run ... -p tiled`. This is also useful when
   diagnosing remote-desktop/compositor problems. Ordinary non-Mac rendering is
   unchanged; the AppKit implementation is not compiled on Windows/Linux.
-- Qt 6.8.3 is the CI version. With that kit, [macOS 12+ is the Qt-supported target](https://doc.qt.io/qt-6.8/macos.html);
-  this fork's native runtime tests use macOS 14.8.9 arm64. Intel Mac, older macOS,
-  Qt 5, signed deployment and physical Retina/GPU combinations are not certified.
+- Mac validation now uses Qt **6.11.3**, with required macOS 14 and `xcode-27`
+  hosted runners. Each run records actual `sw_vers`, architecture and Xcode:
+  runner labels alone are not OS-version evidence. Windows retains its existing
+  Qt 6.8.3/MSVC configuration. Intel/physical Retina/GPU combinations remain
+  unverified; hosted-runner success is not a guarantee for all user environments.
 
-## Mac: clone, build and launch locally
+## Mac: reproducible production package
 
-Install Xcode Command Line Tools/Xcode, Qbs, and a matching **Qt 6.8.3 desktop
-macOS kit** (Widgets, QML, SVG and development tools) using the official Qt
-installer. Qbs may be installed via Homebrew (`brew install qbs`). A moving
-Homebrew Qt version is not the exact tested kit; do not silently mix kits.
+Install Xcode/Command Line Tools, Qbs (`brew install qbs`) and the complete
+**Qt 6.11.3 desktop macOS kit**, including Widgets, QML, SVG and image formats.
+Never mix frameworks or deployment tools from a different kit. Do not use a
+moving Homebrew Qt release as a substitute.
 
 ```sh
 git clone --branch fix/layer-stability-ui --single-branch \
   https://github.com/juliansoul250/tiled.git
 cd tiled
 git rev-parse HEAD
+export QT_ROOT_DIR="$HOME/Qt/6.11.3/macos"  # actual installed desktop kit
+bash dist/macos/build-fork-package.sh
+```
 
-# Replace this path with the actual installed Qt 6.8.3 kit.
-export QTDIR="$HOME/Qt/6.8.3/macos"
-export PATH="$QTDIR/bin:$PATH"
-qmake -v
+The script rejects every Qt version except 6.11.3, uses absolute `qmake` and
+`macdeployqt` paths from that single kit, and creates fresh temporary build and
+install directories. Production symbol visibility is unchanged (the internal
+widget-test option is off). It deploys Qt, applies upstream install-name fixups,
+audits all bundled Qt framework versions, requires the Cocoa plugin, rejects
+external developer library paths, records the build identity, and ad-hoc signs.
+It then copies the `.app` outside the build tree, launches that copy directly
+without Qt/DYLD lookup environment overrides, opens the sample map, captures
+the real window, and requires a clean normal quit before creating the ZIP.
+Temporary build/delivery folders are printed and retained for diagnostics.
+
+Output: `Tiled-macOS-Qt6.11.3-ad-hoc.zip` and `.zip.sha256`.
+This is **ad-hoc signed, NOT Developer ID signed or notarized**. It is not a
+notarized installer. No signing credentials are needed. If macOS blocks opening,
+stop and report the message; do not disable or bypass OS protections.
+
+### Secretary handoff
+
+1. In the branch's **Validate layer fixes on macOS and Windows** Actions run,
+   verify the exact commit and that **all jobs**, including `macos-package`, pass.
+2. Download artifact **Tiled-macOS-Qt6.11.3-ad-hoc**, verify the ZIP using
+   `shasum -a 256` against the accompanying checksum, and extract it.
+3. Quit the old app, retain a backup, and copy the new `Tiled.app` to the chosen
+   Applications folder. Do not launch a stale Dock shortcut/build-folder copy.
+4. Finder → Show Package Contents → `Contents/Resources/fork-build.json` records
+   source commit, dirty status, Qt version, architecture, builder OS and signing.
+   About also shows runtime/build Qt and the packaged commit. Confirm these
+   match the intended CI run before diagnosing another crash.
+5. Keep map/project backups. If opening is blocked, or a crash occurs, send the
+   OS message or `.ips` with `fork-build.json` and the exact last action.
+
+For a development launch only (not portable packaging):
+
+```sh
 qbs setup-toolchains --detect
-qbs setup-qt "$QTDIR/bin/qmake" tiled-qt
+qbs setup-qt "$QT_ROOT_DIR/bin/qmake" tiled-qt
 qbs config profiles.tiled-qt.baseProfile xcode
-qbs config --list
-
-# Normal production symbol visibility, not the diagnostic test configuration.
 qbs build profile:tiled-qt config:release products.python.condition:false
 qbs run profile:tiled-qt config:release products.python.condition:false -p tiled
 ```
 
-Use the detected Apple compiler profile instead of `xcode` if the toolchain list
-uses another name. The Qt kit and compiler must match the machine's architecture.
-For daily use on the build machine, the `qbs run` command is the supported launch
-route and retains correct build-time library paths.
-
-If a self-contained `.app` is needed, prepare it separately using the upstream
-packaging sequence: `qbs install --install-root local-install ...`, `macdeployqt`
-on the resulting `Tiled.app`, and the upstream install-name fixup. See
-`.github/workflows/packages.yml` for the complete platform packaging recipe.
-That deployment/signing/notarization sequence is **not validated by our focused
-CI**; do not present a raw build-folder `.app` as a tested portable installer.
-No signing certificate or Apple-account credentials are requested here.
+Use the detected Apple compiler profile instead of `xcode` if named differently.
+The kit and compiler must match the target architecture. The upstream generic
+`packages.yml` is not the sanctioned fork handoff; its legacy Qt matrix is not
+this crash regression's validation matrix.
 
 ## Mac: native diagnostic tests
 
@@ -129,26 +154,28 @@ qbs run profile:tiled-qt config:release products.python.condition:false -p tiled
 
 ## Verification record
 
-[Run 41031506290](https://github.com/juliansoul250/tiled/actions/runs/41031506290)
-at `b47fbde402afcb564be286d1b29f77f5b1e187d5` established macOS 14.8.9 arm64 /
-Qt 6.8.3 native material evidence:
-- Cocoa widget suite **6 passed**, no failures/skips; eight actual popup/action
-  cycles, floating/redocking, rename/document lifecycle and native material.
-- Separate real Reduce Transparency suite **3 passed**, with original runner
-  preference restored and read back (`1` to `1`). No AppKit hierarchy warning.
-- Compositor samples changed from RGB `(221,201,196)` to `(196,211,221)` when the
-  background changed; opaque canvas pixels stayed identical.
-- Actual built Tiled displayed `desert.tmx`, readable controls and two native
-  material docks; full-app screenshot is in `macos-cocoa-widget-results`.
+[Run 41036743240](https://github.com/juliansoul250/tiled/actions/runs/41036743240)
+at `d366d8087439c694807f4c4c4329de9008b6547f` selected Qt 6.11.3:
+- Full native suite **8 passed**, separate Reduce Transparency suite **3 passed**.
+- All **160 native accessibility cycles** passed; actual sample app quit exited
+  zero. The earlier native-view warning was absent.
+- Qt 6.8.3 remains a historical failing diagnostic, not an allowed-failure gate
+  that can make the deliverable green. It reproduced SIGSEGV in the targeted
+  accessibility test; no old-kit package is approved by this record.
 
-That historical run remained red because its initial smoke harness rejected
-Qt's `-128` Quit reply before checking process exit. The corrected harness above
-requires a clean actual exit. **Use the latest run for the exact installed
-commit's overall result**, including both platform builds, layer regressions
-and drawing UI regressions at 1x/2x. A material screenshot alone is not an overall
-pass. CI uses standard hosted runners, with no deployment or notarization.
+The new required workflow adds ordinary map save/reopen coverage, runs one continuous native process with repeated editing for at least
+**15 minutes** on `xcode-27`,
+and separately builds/audits/smokes a relocated production `.app`. The separately deployed production app stays open on the sample map
+for a further **15 minutes** before normal quit. That production-app hold is
+idle stability coverage, not automated editing inside the packaged app. A timeout, native assertion, crash, nonzero quit or hierarchy
+warning fails validation. Check the latest exact-commit run for these results;
+the previous run above did not execute these newly added package/soak gates.
 
-Focused success does not reproduce or resolve an unidentified user Mac crash.
-Keep the `.ips`, exact commit/app version, macOS version and last action when
-reporting one. The unrelated baseline Properties test failure and full-suite
-limits remain documented in `layer-stability-validation.md`.
+Historical [run 41031506290](https://github.com/juliansoul250/tiled/actions/runs/41031506290)
+at `b47fbde402afcb564be286d1b29f77f5b1e187d5` established native material
+screenshots on Qt 6.8.3 but remained red due to the old Quit harness. It is
+retained as evidence, **not** permission to install that vulnerable kit.
+
+The unrelated baseline Properties test failure and full-suite limits remain
+in `layer-stability-validation.md`. No finite test run establishes that every
+possible application crash has been eliminated.
