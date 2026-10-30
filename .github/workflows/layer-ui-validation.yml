@@ -50,7 +50,7 @@ jobs:
           qbs run profile:qt config:debug projects.Tiled.nativeWidgetTests:true -p test_uistyle -- -o "$GITHUB_WORKSPACE/uistyle-1x.txt,txt"
           QT_SCALE_FACTOR=2 qbs run profile:qt config:debug projects.Tiled.nativeWidgetTests:true -p test_uistyle -- -o "$GITHUB_WORKSPACE/uistyle-2x.txt,txt"
       - name: Run exposed Cocoa layer widgets (no offscreen fallback)
-        timeout-minutes: 8
+        timeout-minutes: 10
         env:
           QT_QPA_PLATFORM: cocoa
           TILED_REQUIRE_COCOA: '1'
@@ -92,16 +92,19 @@ jobs:
                       result = 124
                   if result:
                       raise subprocess.CalledProcessError(result, args)
+              if 'adding an unknown subview' in (out / (stem + '-console.txt')).read_text():
+                  raise RuntimeError('AppKit rejected a material view hierarchy')
           try:
               subprocess.run(['defaults', 'write', *preference, '-bool', 'true'], check=True, timeout=15)
               run_test('system-opaque', ['nativeMaterialAndOpaqueFallback'], expect_reduced=True)
               subprocess.run(['defaults', 'write', *preference, '-bool', 'false'], check=True, timeout=15)
               run_test('tests')
+              subprocess.run(['python3', 'tests/native_app_smoke.py'], check=True, timeout=150)
           finally:
               if old is None:
                   subprocess.run(['defaults', 'delete', *preference], check=True, timeout=15)
               else:
-                  subprocess.run(['defaults', 'write', *preference, '-bool', old], check=True, timeout=15)
+                  subprocess.run(['defaults', 'write', *preference, '-bool', 'true' if old == '1' else 'false'], check=True, timeout=15)
               restored = subprocess.run(['defaults', 'read', *preference], capture_output=True, text=True, timeout=15)
               restored_value = restored.stdout.strip() if restored.returncode == 0 else None
               with (out / 'accessibility-environment.txt').open('a') as log:

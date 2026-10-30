@@ -9,6 +9,9 @@
 #include <QListView>
 #include <QPointer>
 #include <QTableView>
+#include <QSurfaceFormat>
+#include <QScopedValueRollback>
+#include <vector>
 #include <QTimer>
 #include <QTreeView>
 #include <QWidget>
@@ -40,10 +43,6 @@ public:
         report(QStringLiteral("installed-before-show=%1 visible=%2 is-window=%3 platform=%4")
                .arg(!window->isVisible()).arg(window->isVisible()).arg(window->isWindow())
                .arg(QGuiApplication::platformName()));
-        // An alpha backing store lets the AppKit sibling show through only the
-        // chrome/sidebar pixels that we clear. Canvas and editor Base colors
-        // remain opaque. Keep the normal native window frame and traffic lights.
-        window->setAttribute(Qt::WA_TranslucentBackground);
         window->installEventFilter(this);
         connect(qApp, &QApplication::paletteChanged, this, [this] { schedule(); });
         const QPointer<Controller> guard(this);
@@ -62,14 +61,19 @@ public:
     {
         [[[NSWorkspace sharedWorkspace] notificationCenter] removeObserver:mObserver];
         [mObserver release];
-        [mEffect removeFromSuperview];
-        [mEffect release];
+        for (auto &entry : mDocks) {
+            [entry.effect removeFromSuperview];
+            [entry.effect release];
+        }
     }
 
     bool active() const
     {
-        return mEffect && ![mEffect isHidden] && [mEffect superview]
-                && [mEffect isKindOfClass:[NSVisualEffectView class]];
+        for (const auto &entry : mDocks)
+            if (entry.dock && entry.effect && ![entry.effect isHidden]
+                    && [entry.effect superview])
+                return true;
+        return false;
     }
 
     void schedule()
@@ -85,75 +89,87 @@ public:
 
     void update()
     {
-        if (!mWindow || !mWindow->isWindow() || !mWindow->isVisible()) {
-            [mEffect removeFromSuperview];
+        if (mUpdating)
             return;
-        }
-        // Re-fetch native handles after Show/WinIdChange; never retain a Qt view
-        // or replace/reparent its contentView (docking can recreate its handle).
-        NSView *qtView = reinterpret_cast<NSView *>(mWindow->winId());
-        NSWindow *nativeWindow = [qtView window];
-        NSView *parent = [qtView superview];
-        if (!nativeWindow || !parent) {
-            report(QStringLiteral("waiting-native window=%1 parent=%2 view=%3")
-                   .arg(nativeWindow != nil).arg(parent != nil)
-                   .arg(QString::fromUtf8(NSStringFromClass([qtView class]).UTF8String)));
-            return;
-        }
-
-        if (qEnvironmentVariableIsSet("TILED_WIDGET_ARTIFACTS"))
-            qInfo() << "Native glass handles:" << "controller" << this
-                    << "qtView" << reinterpret_cast<void *>(qtView)
-                    << "window" << reinterpret_cast<void *>(nativeWindow)
-                    << "superview" << reinterpret_cast<void *>(parent)
-                    << "contentView" << reinterpret_cast<void *>([nativeWindow contentView]);
+        QScopedValueRollback<bool> updating(mUpdating, true);
         const bool reduce = [[NSWorkspace sharedWorkspace] accessibilityDisplayShouldReduceTransparency];
         const bool enabled = !reduce && !qEnvironmentVariableIsSet("TILED_DISABLE_NATIVE_GLASS");
-        if (enabled) {
-            if (!mEffect) {
-                mEffect = [[TiledGlassEffectView alloc] initWithFrame:[qtView frame]];
-                [mEffect setMaterial:NSVisualEffectMaterialSidebar];
-                [mEffect setBlendingMode:NSVisualEffectBlendingModeBehindWindow];
-                [mEffect setState:NSVisualEffectStateFollowsWindowActiveState];
-                [mEffect setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
-            }
-            // Sibling BELOW Qt, not a child overlay on top of its raster text.
-            if ([mEffect superview] != parent) {
-                [mEffect removeFromSuperview];
-                [parent addSubview:mEffect positioned:NSWindowBelow relativeTo:qtView];
-            }
-            [mEffect setFrame:[qtView frame]];
-            [mEffect setHidden:NO];
-            const bool dark = QApplication::palette().color(QPalette::Window).lightness() < 128;
-            [mEffect setAppearance:[NSAppearance appearanceNamed:dark ? NSAppearanceNameDarkAqua : NSAppearanceNameAqua]];
-        } else {
-            [mEffect setHidden:YES];
-        }
-        report(QStringLiteral("enabled=%1 reduce-transparency=%2 env-disabled=%3 alpha=%4 native-parent=%5 effect-parent=%6 effect-hidden=%7")
-               .arg(enabled).arg(reduce)
-               .arg(qEnvironmentVariableIsSet("TILED_DISABLE_NATIVE_GLASS"))
-               .arg(mWindow->windowHandle() ? mWindow->windowHandle()->format().alphaBufferSize() : -1)
-               .arg(QString::fromUtf8(NSStringFromClass([parent class]).UTF8String))
-               .arg([mEffect superview] != nil).arg(mEffect ? [mEffect isHidden] : true));
-        [nativeWindow setOpaque:!enabled];
-        [nativeWindow setBackgroundColor:enabled ? [NSColor clearColor] : [NSColor windowBackgroundColor]];
-        [nativeWindow setTitlebarAppearsTransparent:enabled];
-        applyPalette(mWindow, enabled);
+        if (!mWindow)
+            return;
 
         for (auto dock : mWindow->findChildren<QDockWidget *>()) {
-            if (!dock->property("tiledGlassDockConnected").toBool()) {
-                dock->setProperty("tiledGlassDockConnected", true);
-                connect(dock, &QDockWidget::topLevelChanged, this, [this, dock](bool floating) {
-                    // Native floating handles already exist here. Never try to
-                    // retrofit an alpha surface: use the readable opaque path.
-                    if (floating)
-                        applyPalette(dock, false);
-                    schedule();
-                });
-            }
-            applyPalette(dock, enabled && !dock->isFloating());
+            bool known = false;
+            for (const auto &entry : mDocks)
+                known |= entry.dock == dock;
+            if (known)
+                continue;
+            mDocks.push_back({dock, nil});
+            dock->installEventFilter(this);
+            connect(dock, &QDockWidget::topLevelChanged, this, [this, dock](bool floating) {
+                if (floating)
+                    applyPalette(dock, false);
+                schedule();
+            });
+            connect(dock, &QDockWidget::visibilityChanged, this, [this] { schedule(); });
         }
-        mWindow->update();
+
+        int attached = 0;
+        for (auto &entry : mDocks) {
+            auto dock = entry.dock.data();
+            bool visible = enabled && mWindow->isVisible() && dock
+                    && !dock->isFloating() && dock->isVisible();
+            if (visible && !dock->internalWinId()) {
+                // Native children have their own alpha surface. Request its
+                // format BEFORE creating its handle, not after a float/show.
+                // Restore the application default synchronously; other windows
+                // retain their normal formats. No event loop runs in this scope.
+                const QSurfaceFormat original = QSurfaceFormat::defaultFormat();
+                QSurfaceFormat alpha = original;
+                alpha.setAlphaBufferSize(8);
+                QSurfaceFormat::setDefaultFormat(alpha);
+                dock->setAttribute(Qt::WA_DontCreateNativeAncestors);
+                dock->setAttribute(Qt::WA_TranslucentBackground);
+                dock->winId();
+                QSurfaceFormat::setDefaultFormat(original);
+            }
+            if (visible) {
+                NSView *view = reinterpret_cast<NSView *>(dock->winId());
+                NSView *parent = [view superview];
+                NSWindow *nativeWindow = [view window];
+                // Preserve Qt's root contentView invariant. Material is ONLY a
+                // sibling of a native dock inside Qt's own content hierarchy,
+                // never a child of AppKit's private NSThemeFrame.
+                const bool inContent = parent && nativeWindow
+                        && (parent == [nativeWindow contentView]
+                            || [parent isDescendantOf:[nativeWindow contentView]]);
+                visible = inContent && dock->windowHandle()
+                        && dock->windowHandle()->format().alphaBufferSize() > 0;
+                if (visible) {
+                    if (!entry.effect) {
+                        entry.effect = [[TiledGlassEffectView alloc] initWithFrame:[view frame]];
+                        [entry.effect setMaterial:NSVisualEffectMaterialSidebar];
+                        [entry.effect setBlendingMode:NSVisualEffectBlendingModeBehindWindow];
+                        [entry.effect setState:NSVisualEffectStateFollowsWindowActiveState];
+                    }
+                    if ([entry.effect superview] != parent) {
+                        [entry.effect removeFromSuperview];
+                        [parent addSubview:entry.effect positioned:NSWindowBelow relativeTo:view];
+                    }
+                    [entry.effect setFrame:[view frame]];
+                    [entry.effect setHidden:NO];
+                    const bool dark = QApplication::palette().color(QPalette::Window).lightness() < 128;
+                    [entry.effect setAppearance:[NSAppearance appearanceNamed:dark ? NSAppearanceNameDarkAqua : NSAppearanceNameAqua]];
+                    ++attached;
+                }
+            }
+            if (!visible)
+                [entry.effect removeFromSuperview];
+            if (dock)
+                applyPalette(dock, visible);
+        }
+        report(QStringLiteral("enabled=%1 reduce-transparency=%2 env-disabled=%3 attached-docks=%4 root-content-unchanged=1")
+               .arg(enabled).arg(reduce)
+               .arg(qEnvironmentVariableIsSet("TILED_DISABLE_NATIVE_GLASS")).arg(attached));
     }
 
 protected:
@@ -163,6 +179,8 @@ protected:
         case QEvent::Show:
         case QEvent::Hide:
         case QEvent::Resize:
+        case QEvent::Move:
+        case QEvent::ParentChange:
         case QEvent::WinIdChange:
         case QEvent::ChildAdded:
         case QEvent::WindowStateChange:
@@ -234,7 +252,12 @@ private:
     }
 
     QPointer<QWidget> mWindow;
-    NSVisualEffectView *mEffect = nil; // owned; Qt native views are not owned
+    struct DockMaterial {
+        QPointer<QDockWidget> dock;
+        NSVisualEffectView *effect; // owned; Qt native views are not owned
+    };
+    std::vector<DockMaterial> mDocks;
+    bool mUpdating = false;
     id mObserver = nil;
     bool mScheduled = false;
 };
@@ -252,12 +275,6 @@ void install(QWidget *window)
 {
     if (!window || QGuiApplication::platformName() != QLatin1String("cocoa"))
         return;
-    // Qt does not support enabling translucent backing stores after show.
-    // Floating panels intentionally keep their existing opaque native surface.
-    if (window->isVisible() && !window->testAttribute(Qt::WA_TranslucentBackground)) {
-        window->setProperty("tiledNativeGlassState", QStringLiteral("installation-rejected: already-visible-without-alpha"));
-        return;
-    }
     if (!controller(window))
         new Controller(window);
 }

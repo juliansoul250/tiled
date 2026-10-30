@@ -285,6 +285,7 @@ void test_LayerWidgets::newLayerPopupThroughRealDock()
     QVERIFY(!dock->isFloating());
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     QCoreApplication::processEvents();
+    QTRY_VERIFY(MacGlass::isActive(&window));
     capture(window, QStringLiteral("real-dock-detached"));
 }
 
@@ -341,6 +342,11 @@ void test_LayerWidgets::nativeMaterialAndOpaqueFallback()
     }
     QTRY_VERIFY2(MacGlass::isActive(&window), qPrintable(window.property("tiledNativeGlassState").toString()));
     QCOMPARE(canvas->palette().color(QPalette::Window).alpha(), 255);
+    // Exercise native-child geometry and preserve the normal framed root window.
+    window.resize(680, 500);
+    window.move(170, 150);
+    QTest::qWait(100);
+    QTRY_VERIFY(MacGlass::isActive(&window));
 
     const auto screenshot = [&](const QString &name) {
         const QPoint position = window.mapToGlobal(QPoint());

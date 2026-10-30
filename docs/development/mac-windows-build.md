@@ -16,7 +16,7 @@ Do not disable Gatekeeper, SIP, code-signing checks, or other OS protections.
   are no longer read for this purpose. **Original author/contributor attribution,
   About copyright, AUTHORS, COPYING/GPL, and source license headers remain.**
 - macOS uses AppKit **NSVisualEffectView / sidebar material**, with behind-window
-  blending, beneath Qt's top-level content. Docked sidebar backgrounds expose
+  blending, beneath each native dock inside Qt's content hierarchy. Docked sidebar backgrounds expose
   that material; map/document canvases remain opaque. This is genuine native
   frosted vibrancy, **not macOS 26 Liquid Glass / NSGlassEffectView**.
 - Floating docks intentionally use an opaque fallback: Qt cannot safely change

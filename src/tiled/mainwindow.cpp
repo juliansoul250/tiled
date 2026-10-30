@@ -232,7 +232,7 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     Q_ASSERT(!mInstance);
     mInstance = this;
 
-    // Request alpha before restoreGeometry/restoreState can create a window.
+    // Observe dock creation and native-window lifecycle from startup.
     MacGlass::install(this);
     mUi->setupUi(this);
 
