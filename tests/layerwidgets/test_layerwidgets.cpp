@@ -326,7 +326,8 @@ void test_LayerWidgets::nativeMaterialAndOpaqueFallback()
     QVERIFY(QTest::qWaitForWindowExposed(&window));
     window.activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(&window));
-    QTRY_VERIFY(MacGlass::isActive(&window));
+    capture(window, QStringLiteral("native-material-initial-widget"));
+    QTRY_VERIFY2(MacGlass::isActive(&window), qPrintable(window.property("tiledNativeGlassState").toString()));
     QCOMPARE(canvas->palette().color(QPalette::Window).alpha(), 255);
 
     const auto screenshot = [&](const QString &name) {

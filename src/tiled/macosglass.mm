@@ -3,6 +3,8 @@
 
 #include <QApplication>
 #include <QDockWidget>
+#include <QDebug>
+#include <QWindow>
 #include <QEvent>
 #include <QListView>
 #include <QPointer>
@@ -35,6 +37,9 @@ public:
     explicit Controller(QWidget *window) : QObject(window), mWindow(window)
     {
         setObjectName(QLatin1String(controllerName));
+        report(QStringLiteral("installed-before-show=%1 visible=%2 is-window=%3 platform=%4")
+               .arg(!window->isVisible()).arg(window->isVisible()).arg(window->isWindow())
+               .arg(QGuiApplication::platformName()));
         // An alpha backing store lets the AppKit sibling show through only the
         // chrome/sidebar pixels that we clear. Canvas and editor Base colors
         // remain opaque. Keep the normal native window frame and traffic lights.
@@ -89,9 +94,19 @@ public:
         NSView *qtView = reinterpret_cast<NSView *>(mWindow->winId());
         NSWindow *nativeWindow = [qtView window];
         NSView *parent = [qtView superview];
-        if (!nativeWindow || !parent)
+        if (!nativeWindow || !parent) {
+            report(QStringLiteral("waiting-native window=%1 parent=%2 view=%3")
+                   .arg(nativeWindow != nil).arg(parent != nil)
+                   .arg(QString::fromUtf8(NSStringFromClass([qtView class]).UTF8String)));
             return;
+        }
 
+        if (qEnvironmentVariableIsSet("TILED_WIDGET_ARTIFACTS"))
+            qInfo() << "Native glass handles:" << "controller" << this
+                    << "qtView" << reinterpret_cast<void *>(qtView)
+                    << "window" << reinterpret_cast<void *>(nativeWindow)
+                    << "superview" << reinterpret_cast<void *>(parent)
+                    << "contentView" << reinterpret_cast<void *>([nativeWindow contentView]);
         const bool reduce = [[NSWorkspace sharedWorkspace] accessibilityDisplayShouldReduceTransparency];
         const bool enabled = !reduce && !qEnvironmentVariableIsSet("TILED_DISABLE_NATIVE_GLASS");
         if (enabled) {
@@ -114,6 +129,12 @@ public:
         } else {
             [mEffect setHidden:YES];
         }
+        report(QStringLiteral("enabled=%1 reduce-transparency=%2 env-disabled=%3 alpha=%4 native-parent=%5 effect-parent=%6 effect-hidden=%7")
+               .arg(enabled).arg(reduce)
+               .arg(qEnvironmentVariableIsSet("TILED_DISABLE_NATIVE_GLASS"))
+               .arg(mWindow->windowHandle() ? mWindow->windowHandle()->format().alphaBufferSize() : -1)
+               .arg(QString::fromUtf8(NSStringFromClass([parent class]).UTF8String))
+               .arg([mEffect superview] != nil).arg(mEffect ? [mEffect isHidden] : true));
         [nativeWindow setOpaque:!enabled];
         [nativeWindow setBackgroundColor:enabled ? [NSColor clearColor] : [NSColor windowBackgroundColor]];
         [nativeWindow setTitlebarAppearsTransparent:enabled];
@@ -154,6 +175,15 @@ protected:
     }
 
 private:
+    void report(const QString &state)
+    {
+        if (mWindow->property("tiledNativeGlassState").toString() == state)
+            return;
+        mWindow->setProperty("tiledNativeGlassState", state);
+        if (qEnvironmentVariableIsSet("TILED_WIDGET_ARTIFACTS"))
+            qInfo() << "Native glass:" << state;
+    }
+
     static QPalette originalPalette(QWidget *widget)
     {
         if (!widget->property("tiledGlassSavedPalette").isValid()) {
@@ -224,8 +254,10 @@ void install(QWidget *window)
         return;
     // Qt does not support enabling translucent backing stores after show.
     // Floating panels intentionally keep their existing opaque native surface.
-    if (window->isVisible() && !window->testAttribute(Qt::WA_TranslucentBackground))
+    if (window->isVisible() && !window->testAttribute(Qt::WA_TranslucentBackground)) {
+        window->setProperty("tiledNativeGlassState", QStringLiteral("installation-rejected: already-visible-without-alpha"));
         return;
+    }
     if (!controller(window))
         new Controller(window);
 }
