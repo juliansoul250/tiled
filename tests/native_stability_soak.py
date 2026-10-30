@@ -11,7 +11,7 @@ env['TILED_LONG_NATIVE_SOAK'] = '1'
 env['QTEST_FUNCTION_TIMEOUT'] = '1100000'
 command = ['qbs', 'run', 'profile:qt', 'config:debug',
            'projects.Tiled.nativeWidgetTests:true', '-p', 'test_layerwidgets', '--',
-           '-o', str(out / 'tests.txt') + ',txt']
+           '-o', str(out / 'tests.txt') + ',txt', '-maxwarnings', '1000000']
 with (out / 'console.txt').open('w') as log:
     process = subprocess.Popen(command, env=env, stdout=log, stderr=subprocess.STDOUT,
                                start_new_session=True)

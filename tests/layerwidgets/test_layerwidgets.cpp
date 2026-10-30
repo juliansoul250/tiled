@@ -41,6 +41,7 @@ class test_LayerWidgets : public QObject
     Q_OBJECT
 private:
     void exerciseNativeAccessibility(bool glass);
+    std::unique_ptr<MapDocumentActionHandler> mActionHandler;
 private slots:
     void initTestCase();
     void continuousNativeStability();
@@ -75,6 +76,8 @@ void test_LayerWidgets::initTestCase()
 {
     Preferences::instance()->setApplicationStyle(Preferences::TiledStyle);
     StyleHelper::initialize();
+    // Like MainWindow, retain the globally registered actions for this process.
+    mActionHandler = std::make_unique<MapDocumentActionHandler>();
     qInfo() << "Editor theme:" << QApplication::style()->objectName();
     qInfo() << "Native platform:" << QGuiApplication::platformName()
             << "Qt:" << qVersion();
@@ -238,7 +241,7 @@ void test_LayerWidgets::newLayerPopupThroughRealDock()
 {
     auto document = std::make_unique<MapDocument>(makeMap());
     MapDocument other(makeMap());
-    MapDocumentActionHandler handler;
+    auto &handler = *mActionHandler;
     QMainWindow window;
     // MainWindow normally registers this unrelated toolbar action. The fixture
     // does not test highlighting; all New Layer actions/slots are production.
@@ -249,6 +252,12 @@ void test_LayerWidgets::newLayerPopupThroughRealDock()
         ActionManager::unregisterAction(&highlight, "HighlightCurrentLayer");
     });
     auto dock = new LayerDock(&window);
+    // Disconnect the process-lifetime handler on every assertion/return path,
+    // while both dock and documents are still alive.
+    const auto detachDocument = qScopeGuard([&] {
+        handler.setMapDocument(nullptr);
+        dock->setMapDocument(nullptr);
+    });
     window.addDockWidget(Qt::LeftDockWidgetArea, dock);
     window.resize(640, 480);
     handler.setMapDocument(document.get());
