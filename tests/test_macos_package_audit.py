@@ -77,6 +77,8 @@ class PackageAudit(unittest.TestCase):
         with self.assertRaises(RuntimeError): self.audit(dependency='@executable_path/../../../../outside.dylib')
     def test_escaping_rpath_rejected(self):
         with self.assertRaises(RuntimeError): self.audit(rpath='@loader_path/../../../../../../outside')
+    def test_unused_bundle_contained_rpath_is_safe(self):
+        self.audit(rpath='@executable_path/../unused-sdk-lib')
     def test_external_rpath_rejected(self):
         with self.assertRaises(RuntimeError): self.audit(rpath='/Users/builder/Qt/lib')
 
