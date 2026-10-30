@@ -27,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, xcode-27]
+        os: [macos-15, xcode-27]
         qt: ['6.11.3']
     timeout-minutes: 60
     env:
