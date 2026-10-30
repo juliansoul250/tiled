@@ -327,6 +327,18 @@ void test_LayerWidgets::nativeMaterialAndOpaqueFallback()
     window.activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(&window));
     capture(window, QStringLiteral("native-material-initial-widget"));
+    // A separate process in CI verifies the real system preference, before the
+    // isolated runner switches it off to exercise visible native material.
+    if (qEnvironmentVariableIsSet("TILED_EXPECT_SYSTEM_REDUCED_TRANSPARENCY")) {
+        QTRY_VERIFY(window.property("tiledNativeGlassState").toString().contains(
+            QStringLiteral("reduce-transparency=1")));
+        QVERIFY(!MacGlass::isActive(&window));
+        QCOMPARE(window.palette().color(QPalette::Window).alpha(), 255);
+        QCOMPARE(view->palette().color(QPalette::Base).alpha(), 255);
+        QCOMPARE(canvas->palette().color(QPalette::Window).alpha(), 255);
+        capture(window, QStringLiteral("native-material-system-opaque"));
+        return;
+    }
     QTRY_VERIFY2(MacGlass::isActive(&window), qPrintable(window.property("tiledNativeGlassState").toString()));
     QCOMPARE(canvas->palette().color(QPalette::Window).alpha(), 255);
 

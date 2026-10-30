@@ -50,7 +50,7 @@ jobs:
           qbs run profile:qt config:debug projects.Tiled.nativeWidgetTests:true -p test_uistyle -- -o "$GITHUB_WORKSPACE/uistyle-1x.txt,txt"
           QT_SCALE_FACTOR=2 qbs run profile:qt config:debug projects.Tiled.nativeWidgetTests:true -p test_uistyle -- -o "$GITHUB_WORKSPACE/uistyle-2x.txt,txt"
       - name: Run exposed Cocoa layer widgets (no offscreen fallback)
-        timeout-minutes: 5
+        timeout-minutes: 8
         env:
           QT_QPA_PLATFORM: cocoa
           TILED_REQUIRE_COCOA: '1'
@@ -63,18 +63,51 @@ jobs:
           python3 - <<'PYTHON'
           import os, pathlib, signal, subprocess, sys
           out = pathlib.Path(os.environ['TILED_WIDGET_ARTIFACTS'])
-          command = ['qbs', 'run', 'profile:qt', 'config:debug', 'projects.Tiled.nativeWidgetTests:true', '-p', 'test_layerwidgets', '--',
-                     '-o', str(out / 'tests.txt') + ',txt',
-                     '-o', str(out / 'tests.xml') + ',junitxml']
-          with (out / 'console.txt').open('w') as log:
-              process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
-              try:
-                  sys.exit(process.wait(timeout=180))
-              except subprocess.TimeoutExpired:
-                  os.killpg(process.pid, signal.SIGKILL)
-                  process.wait()
-                  log.write('\nNative widget test exceeded 180 seconds; infrastructure/test failure.\n')
-                  sys.exit(124)
+          command = ['qbs', 'run', 'profile:qt', 'config:debug', 'projects.Tiled.nativeWidgetTests:true', '-p', 'test_layerwidgets', '--']
+          # Scoped to this disposable CI account, never the user's Mac. Keep the
+          # application accessibility behavior intact and test BOTH real states.
+          preference = ['com.apple.universalaccess', 'reduceTransparency']
+          original = subprocess.run(['defaults', 'read', *preference], capture_output=True, text=True, timeout=15)
+          if original.returncode and 'does not exist' not in original.stderr:
+              raise RuntimeError('Cannot inspect accessibility preference: ' + original.stderr)
+          old = original.stdout.strip() if original.returncode == 0 else None
+          if old not in (None, '0', '1'):
+              raise RuntimeError('Unexpected reduceTransparency value; refusing to replace it: ' + old)
+          (out / 'accessibility-environment.txt').write_text('Original reduceTransparency=' + str(old) + '\n')
+          def run_test(stem, functions=(), expect_reduced=False):
+              env = os.environ.copy()
+              env.pop('TILED_EXPECT_SYSTEM_REDUCED_TRANSPARENCY', None)
+              if expect_reduced:
+                  env['TILED_EXPECT_SYSTEM_REDUCED_TRANSPARENCY'] = '1'
+              with (out / (stem + '-console.txt')).open('w') as log:
+                  args = command + list(functions) + ['-o', str(out / (stem + '.txt')) + ',txt',
+                                                     '-o', str(out / (stem + '.xml')) + ',junitxml']
+                  process = subprocess.Popen(args, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+                  try:
+                      result = process.wait(timeout=180)
+                  except subprocess.TimeoutExpired:
+                      os.killpg(process.pid, signal.SIGKILL)
+                      process.wait()
+                      log.write('\nNative widget test exceeded 180 seconds; infrastructure/test failure.\n')
+                      result = 124
+                  if result:
+                      raise subprocess.CalledProcessError(result, args)
+          try:
+              subprocess.run(['defaults', 'write', *preference, '-bool', 'true'], check=True, timeout=15)
+              run_test('system-opaque', ['nativeMaterialAndOpaqueFallback'], expect_reduced=True)
+              subprocess.run(['defaults', 'write', *preference, '-bool', 'false'], check=True, timeout=15)
+              run_test('tests')
+          finally:
+              if old is None:
+                  subprocess.run(['defaults', 'delete', *preference], check=True, timeout=15)
+              else:
+                  subprocess.run(['defaults', 'write', *preference, '-bool', old], check=True, timeout=15)
+              restored = subprocess.run(['defaults', 'read', *preference], capture_output=True, text=True, timeout=15)
+              restored_value = restored.stdout.strip() if restored.returncode == 0 else None
+              with (out / 'accessibility-environment.txt').open('a') as log:
+                  log.write('Restored reduceTransparency=' + str(restored_value) + '\n')
+              if restored_value != old:
+                  raise RuntimeError('Accessibility preference restoration did not match original')
           PYTHON
       - name: Collect native failure evidence from isolated runner
         if: failure()
