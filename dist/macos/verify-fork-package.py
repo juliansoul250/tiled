@@ -28,7 +28,9 @@ frameworks = list((app / 'Contents/Frameworks').glob('Qt*.framework'))
 require(frameworks, 'No deployed Qt frameworks')
 for framework in frameworks:
     info = plistlib.loads((framework / 'Resources/Info.plist').read_bytes())
-    require(info['CFBundleShortVersionString'] == expected, (framework, info))
+    # Qt stores major.minor in the display field and the exact patch in BundleVersion.
+    require(info['CFBundleVersion'] == expected, (framework, info))
+    require(info['CFBundleShortVersionString'] == '.'.join(expected.split('.')[:2]), (framework, info))
     name = framework.stem
     same_kit(framework / name, kit / 'lib' / framework.name / name)
 plugin = app / 'Contents/PlugIns/platforms/libqcocoa.dylib'
