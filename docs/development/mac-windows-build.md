@@ -93,6 +93,16 @@ LayerDock actions/menus, all four layer types, rename accept/cancel, document
 switch/detach, nested deletion/undo/redo, floating/redocking, and the themed
 material/opaque fallback. Compositor images with changing colored backgrounds
 are used to check visible material response and an unchanged opaque canvas.
+The CI runner also launches the actual built Tiled application with the included
+`examples/desert.tmx`, captures its desktop window, sends a standard Quit
+AppleEvent, and requires the actual application process to exit with code zero.
+This uses no production test hook or Accessibility input automation. A timeout,
+permission denial, nonzero application exit, or AppKit hierarchy warning fails
+validation. [Qt 6.8.3's Cocoa delegate](https://github.com/qt/qtbase/blob/v6.8.3/src/plugins/platforms/cocoa/qcocoaapplicationdelegate.mm#L98-L103)
+returns `NSTerminateCancel` even after accepting quit, to unwind through `main()`.
+The harness records that specific AppleEvent `-128` reply but only accepts it
+when the independently awaited process exits zero; forced cleanup is never a
+successful close test. Artifacts include the reply, exit result and app console.
 
 ## Windows
 
@@ -113,16 +123,24 @@ qbs run profile:tiled-qt config:release products.python.condition:false -p tiled
 
 ## Verification record
 
-Before the material/donation change, [run 41018503219](https://github.com/juliansoul250/tiled/actions/runs/41018503219)
-at `f00d5bd66cf86d250f6e5e18342cb1bbd92d7381` passed:
-- macOS 14.8.9 arm64 / Qt 6.8.3: Cocoa widget suite **5 passed** (three scenarios
-  plus setup/cleanup), eight actual popup/action cycles, no failures/skips.
-- macOS and Windows: layer **14/14**, drawing UI **38/38 at 1x and 2x**.
+[Run 41031506290](https://github.com/juliansoul250/tiled/actions/runs/41031506290)
+at `b47fbde402afcb564be286d1b29f77f5b1e187d5` established macOS 14.8.9 arm64 /
+Qt 6.8.3 native material evidence:
+- Cocoa widget suite **6 passed**, no failures/skips; eight actual popup/action
+  cycles, floating/redocking, rename/document lifecycle and native material.
+- Separate real Reduce Transparency suite **3 passed**, with original runner
+  preference restored and read back (`1` to `1`). No AppKit hierarchy warning.
+- Compositor samples changed from RGB `(221,201,196)` to `(196,211,221)` when the
+  background changed; opaque canvas pixels stayed identical.
+- Actual built Tiled displayed `desert.tmx`, readable controls and two native
+  material docks; full-app screenshot is in `macos-cocoa-widget-results`.
 
-Those are **pre-material** results, not evidence that the new visual change
-passed. Review the latest run for the exact installed commit and its compositor
-screenshots before treating the new material as verified. CI uses standard
-macOS/Windows hosted runners, with no purchase, deployment or notarization.
+That historical run remained red because its initial smoke harness rejected
+Qt's `-128` Quit reply before checking process exit. The corrected harness above
+requires a clean actual exit. **Use the latest run for the exact installed
+commit's overall result**, including both platform builds, layer regressions
+and drawing UI regressions at 1x/2x. A material screenshot alone is not an overall
+pass. CI uses standard hosted runners, with no deployment or notarization.
 
 Focused success does not reproduce or resolve an unidentified user Mac crash.
 Keep the `.ips`, exact commit/app version, macOS version and last action when
