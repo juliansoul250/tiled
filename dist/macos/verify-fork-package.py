@@ -38,6 +38,21 @@ conf = configparser.ConfigParser()
 conf.read(app / 'Contents/Resources/qt.conf')
 require(conf.get('Paths', 'Translations', fallback='') == 'Translations', 'Qt 中文词典搜索路径不正确')
 require((app / 'Contents/Resources/tiled-zh_CN-guide.html').is_file(), '缺少离线中文使用说明')
+unity = app / 'Contents/Resources/unity'
+unity_source = source / 'thirdparty/super-tiled2unity'
+require((unity / 'SOURCE.json').is_file(), '缺少 Unity 导入器固定来源记录')
+require((unity / 'SOURCE.json').read_bytes() == (unity_source / 'SOURCE.json').read_bytes(),
+        'Unity 导入器来源与当前源码不一致')
+unity_record = json.loads((unity / 'SOURCE.json').read_text())
+require(unity_record['commit'] == 'd3deae415963807caef14c522ed8be9bc30e89e0', 'Unity 导入器提交不符')
+unity_package = unity / 'com.seanba.super-tiled2unity'
+unity_files = {}
+for path in unity_package.rglob('*'):
+    require(not path.is_symlink(), 'Unity 导入器禁止符号链接')
+    if path.is_file():
+        unity_files[path.relative_to(unity_package).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+require(unity_files == unity_record['files'], 'Unity 导入器文件缺失、被修改或混入未知文件')
+require((unity / 'UPSTREAM-LICENSE').is_file() and 'LICENSE.md' in unity_files, 'Unity 导入器许可证缺失')
 frameworks = list((app / 'Contents/Frameworks').glob('Qt*.framework'))
 require(frameworks, 'No deployed Qt frameworks')
 for framework in frameworks:
@@ -105,7 +120,7 @@ for binary in app.rglob('*'):
     except Exception as error:
         audit_errors.append(f"{binary}: {type(error).__name__}: {error}")
 require(not audit_errors, 'Deployed library audit failed:\n' + '\n'.join(audit_errors))
-identity = {'source_commit': run('git', '-C', str(source), 'rev-parse', 'HEAD'), 'source_dirty': bool(run('git', '-C', str(source), 'status', '--porcelain', '--untracked-files=no')), 'qt_version': expected, 'ui_language': 'zh_CN', 'qt_chinese_catalog_sha256': hashlib.sha256(qt_catalog.read_bytes()).hexdigest(), 'qt_kit': str(kit), 'cocoa_plugin_uuids': cocoa_uuids, 'qmake': str(kit / 'bin/qmake'), 'macdeployqt': str(kit / 'bin/macdeployqt'), 'built_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'macos': run('sw_vers'), 'architecture': run('uname', '-m'), 'signing': 'ad-hoc; NOT Developer ID signed or notarized', 'qt_frameworks': sorted((p.name for p in frameworks)), 'audited_macho_files': checked}
+identity = {'source_commit': run('git', '-C', str(source), 'rev-parse', 'HEAD'), 'source_dirty': bool(run('git', '-C', str(source), 'status', '--porcelain', '--untracked-files=no')), 'qt_version': expected, 'ui_language': 'zh_CN', 'unity_importer_commit': unity_record['commit'], 'qt_chinese_catalog_sha256': hashlib.sha256(qt_catalog.read_bytes()).hexdigest(), 'qt_kit': str(kit), 'cocoa_plugin_uuids': cocoa_uuids, 'qmake': str(kit / 'bin/qmake'), 'macdeployqt': str(kit / 'bin/macdeployqt'), 'built_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'macos': run('sw_vers'), 'architecture': run('uname', '-m'), 'signing': 'ad-hoc; NOT Developer ID signed or notarized', 'qt_frameworks': sorted((p.name for p in frameworks)), 'audited_macho_files': checked}
 (app / 'Contents/Resources/fork-build.json').write_text(json.dumps(identity, indent=2) + '\n')
 plist_path = app / 'Contents/Info.plist'
 plist = plistlib.loads(plist_path.read_bytes())

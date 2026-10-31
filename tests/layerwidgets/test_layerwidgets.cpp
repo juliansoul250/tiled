@@ -120,6 +120,7 @@ void test_LayerWidgets::simplifiedChineseCatalogs()
     QCOMPARE(appTranslator.translate("MainWindow", "&File"), QStringLiteral("文件(&F)"));
     QCOMPARE(appTranslator.translate("MainWindow", "Chinese Quick Start and Troubleshooting"),
              QStringLiteral("中文入门与故障排查"));
+    QCOMPARE(appTranslator.translate("MainWindow", "Import into Unity..."), QStringLiteral("导入到 Unity…"));
     QTranslator qtTranslator;
     QVERIFY(qtTranslator.load(QStringLiteral("qtbase_zh_CN"),
                               QLibraryInfo::location(QLibraryInfo::TranslationsPath)));

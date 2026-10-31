@@ -765,6 +765,10 @@
 <context>
     <name>MainWindow</name>
     <message>
+        <source>Import into Unity...</source>
+        <translation>导入到 Unity…</translation>
+    </message>
+    <message>
         <location filename="../src/tiled/mainwindow.ui" line="+46"/>
         <source>&amp;File</source>
         <translation>文件(&amp;F)</translation>
@@ -4451,6 +4455,46 @@ Do you want to replace it?</source>
 </context>
 <context>
     <name>Tiled::MainWindow</name>
+    <message>
+        <source>Import into Unity</source>
+        <translation>导入到 Unity</translation>
+    </message>
+    <message>
+        <source>Save this map as an XML TMX file before importing into Unity.</source>
+        <translation>请先将当前地图保存为 XML 格式的 TMX 文件，再导入到 Unity。</translation>
+    </message>
+    <message>
+        <source>Save or close all modified maps, tilesets and templates first. No Unity project files were changed.</source>
+        <translation>请先保存或关闭所有已修改的地图、瓦片集和模板。本次没有更改 Unity 项目文件。</translation>
+    </message>
+    <message>
+        <source>Select the Unity 2022.3 project folder (containing Assets and ProjectSettings)</source>
+        <translation>选择 Unity 2022.3 项目文件夹（其中应包含 Assets 和 ProjectSettings）</translation>
+    </message>
+    <message>
+        <source>The map and its dependencies will be copied into a managed Assets/TiledImports folder. Only unchanged files from a previous import may be updated.
+
+SuperTiled2Unity 2.4.0 is included. Unity may need Internet access to resolve its dependencies. Close Unity before continuing, then reopen the project to let Unity import the assets.
+
+Review the file list under Show Details. Continue?</source>
+        <translation>地图及其依赖资源将复制到受管理的 Assets/TiledImports 文件夹。只会更新上次导入后未经修改的文件。
+
+本软件内置 SuperTiled2Unity 2.4.0。Unity 解析其依赖包时可能需要联网。请先关闭 Unity，完成后重新打开项目，由 Unity 导入资源。
+
+请展开“显示详细信息”检查文件清单。是否继续？</translation>
+    </message>
+    <message>
+        <source>Files have been sent to the Unity project. Open the project in Unity 2022.3 and wait for Unity to finish importing.
+
+Map: %1
+
+This does not confirm that Unity compilation or prefab generation succeeded; check the Unity Console if errors appear.</source>
+        <translation>文件已送入 Unity 项目。请用 Unity 2022.3 打开该项目，等待 Unity 完成导入。
+
+地图路径：%1
+
+这不代表 Unity 已编译成功或已生成预制体；如出现错误，请查看 Unity 的 Console 控制台。</translation>
+    </message>
     <message>
         <location filename="../src/tiled/abstractobjecttool.cpp" line="-276"/>
         <location filename="../src/tiled/documentmanager.cpp" line="-703"/>

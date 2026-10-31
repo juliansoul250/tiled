@@ -81,8 +81,20 @@ TiledQtGuiApplication {
     }
 
     Group {
+        name: "Pinned SuperTiled2Unity importer and provenance"
+        prefix: "../../thirdparty/super-tiled2unity/"
+        files: ["**/*"]
+        fileTags: ["unity-importer-data"]
+        qbs.install: true
+        qbs.installSourceBase: prefix
+        qbs.installDir: project.windowsLayout ? "unity"
+                : qbs.targetOS.contains("macos") ? "Tiled.app/Contents/Resources/unity"
+                : "share/tiled/unity"
+    }
+
+    Group {
         name: "Simplified Chinese offline guide"
-        files: ["../../docs/development/tiled-zh_CN-guide.html"]
+        files: ["../../docs/development/tiled-zh_CN-guide.html", "../../docs/development/unity-import-zh_CN.md"]
         qbs.install: true
         qbs.installDir: project.windowsLayout ? "doc"
                 : qbs.targetOS.contains("macos") ? "Tiled.app/Contents/Resources"

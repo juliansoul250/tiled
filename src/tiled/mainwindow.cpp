@@ -26,6 +26,7 @@
  */
 
 #include "mainwindow.h"
+#include "unitytransfer.h"
 #include "ui_mainwindow.h"
 
 #include "aboutdialog.h"
@@ -82,6 +83,7 @@
 #include <QCloseEvent>
 #include <QDesktopServices>
 #include <QFileDialog>
+#include <QDebug>
 #include <QLabel>
 #include <QMessageBox>
 #include <QMimeData>
@@ -700,6 +702,9 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     connect(mUi->actionClearRecentProjects, &QAction::triggered, preferences, &Preferences::clearRecentProjects);
     connect(mUi->actionProjectProperties, &QAction::triggered, this, &MainWindow::projectProperties);
 
+    connect(mUi->actionImportToUnity, &QAction::triggered, this, &MainWindow::importToUnity);
+    if (qEnvironmentVariableIsSet("TILED_WIDGET_ARTIFACTS"))
+        qInfo().noquote() << QStringLiteral("Unity transfer menu:") << mUi->actionImportToUnity->text();
     connect(mUi->actionChineseGuide, &QAction::triggered, this, &MainWindow::openChineseGuide);
     connect(mUi->actionDocumentation, &QAction::triggered, this, &MainWindow::openDocumentation);
     connect(mUi->actionForum, &QAction::triggered, this, &MainWindow::openForum);
@@ -2198,6 +2203,7 @@ void MainWindow::updateActions()
     mUi->actionSaveAll->setEnabled(document);
 
     mUi->actionExportAsImage->setEnabled(mapDocument);
+    mUi->actionImportToUnity->setEnabled(mapDocument);
     mUi->actionExport->setEnabled(mapDocument || tilesetDocument);
     mUi->actionExportAs->setEnabled(mapDocument || tilesetDocument);
     mUi->actionReload->setEnabled(document && document->canReload());
@@ -2265,6 +2271,57 @@ void MainWindow::updateZoomActions()
     mUi->actionZoomOut->setEnabled(mZoomable && mZoomable->canZoomOut());
     mUi->actionZoomNormal->setEnabled(scale != 1);
     mUi->actionFitInView->setEnabled(mDocument && mDocument->type() == Document::MapDocumentType);
+}
+
+void MainWindow::importToUnity()
+{
+    const auto document = mDocumentManager->currentDocument();
+    if (!qobject_cast<MapDocument *>(document))
+        return;
+    const auto title = tr("Import into Unity");
+    if (document->fileName().isEmpty()) {
+        QMessageBox::warning(this, title, tr("Save this map as an XML TMX file before importing into Unity."));
+        return;
+    }
+    // Dependencies can also be open tileset/template documents. Never silently
+    // transfer stale on-disk data while any open document has pending changes.
+    for (const auto &openDocument : mDocumentManager->documents()) {
+        if (openDocument->isModified()) {
+            QMessageBox::warning(this, title, tr("Save or close all modified maps, tilesets and templates first. No Unity project files were changed."));
+            return;
+        }
+    }
+    const auto project = QFileDialog::getExistingDirectory(this,
+            tr("Select the Unity 2022.3 project folder (containing Assets and ProjectSettings)"));
+    if (project.isEmpty())
+        return;
+    QString package = QCoreApplication::applicationDirPath();
+#if defined(TILED_WINDOWS_LAYOUT)
+    package += QStringLiteral("/unity/com.seanba.super-tiled2unity");
+#elif defined(Q_OS_MAC)
+    package += QStringLiteral("/../Resources/unity/com.seanba.super-tiled2unity");
+#else
+    package += QStringLiteral("/../share/tiled/unity/com.seanba.super-tiled2unity");
+#endif
+    const auto plan = UnityTransfer::plan(document->fileName(), project, package);
+    if (!plan.error.isEmpty()) {
+        QMessageBox::warning(this, title, plan.error);
+        return;
+    }
+    QMessageBox confirm(QMessageBox::Question, title,
+            tr("The map and its dependencies will be copied into a managed Assets/TiledImports folder. Only unchanged files from a previous import may be updated.\n\nSuperTiled2Unity 2.4.0 is included. Unity may need Internet access to resolve its dependencies. Close Unity before continuing, then reopen the project to let Unity import the assets.\n\nReview the file list under Show Details. Continue?"),
+            QMessageBox::Ok | QMessageBox::Cancel, this);
+    confirm.setDefaultButton(QMessageBox::Cancel);
+    confirm.setDetailedText(plan.preview.join(QLatin1Char('\n')));
+    if (confirm.exec() != QMessageBox::Ok)
+        return;
+    const auto error = UnityTransfer::apply(plan);
+    if (!error.isEmpty()) {
+        QMessageBox::warning(this, title, error);
+        return;
+    }
+    QMessageBox::information(this, title,
+            tr("Files have been sent to the Unity project. Open the project in Unity 2022.3 and wait for Unity to finish importing.\n\nMap: %1\n\nThis does not confirm that Unity compilation or prefab generation succeeded; check the Unity Console if errors appear.").arg(plan.destinationMapPath));
 }
 
 void MainWindow::openChineseGuide()

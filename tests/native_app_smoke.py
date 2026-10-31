@@ -57,6 +57,8 @@ with log_path.open('w') as log:
             text = log_path.read_text()
             if 'Localization: language=zh_CN app=1 qt=1 file-menu=文件' not in text:
                 raise RuntimeError('简体中文词典未实际加载；请核对语言设置、应用与 Qt 词典打包。')
+            if 'Unity transfer menu: 导入到 Unity' not in text:
+                raise RuntimeError('实际应用缺少中文 Unity 导入菜单入口。')
             (out / 'chinese-localization-result.txt').write_text(
                 'PASS: 实际应用已加载 Tiled 和 Qt 简体中文词典，文件菜单为中文。\n')
         # AppleEvents activate/quit the application, not Accessibility keystrokes.

@@ -13,6 +13,7 @@ on:
       - 'tests/**'
       - 'dist/**'
       - 'translations/**'
+      - 'thirdparty/super-tiled2unity/**'
       - '!dist/macos/build-fork-package.sh'
       - '!dist/macos/verify-fork-package.py'
       - '!tests/test_macos_package_audit.py'
@@ -52,8 +53,11 @@ jobs:
         run: |
           python tests/check_fork_ui_policy.py
           python tests/check_chinese_translation.py
+          python tests/check_unity_importer.py
       - name: Build shared editor source and focused tests
-        run: qbs build profile:qt config:debug projects.Tiled.nativeWidgetTests:true -p tiled,test_layers,test_uistyle,test_layerwidgets
+        run: qbs build profile:qt config:debug projects.Tiled.nativeWidgetTests:true -p tiled,test_layers,test_uistyle,test_layerwidgets,test_unitytransfer
+      - name: Test safe Unity project transfer
+        run: qbs run profile:qt config:debug projects.Tiled.nativeWidgetTests:true -p test_unitytransfer -- -o "$GITHUB_WORKSPACE/unity-transfer.txt,txt"
       - name: Run layer regressions
         run: qbs run profile:qt config:debug projects.Tiled.nativeWidgetTests:true -p test_layers -- -o "$GITHUB_WORKSPACE/layers.txt,txt"
       - name: Run UI regressions at 1x and 2x
@@ -158,6 +162,7 @@ jobs:
         with:
           name: ${{ matrix.os }}-layer-ui-results-qt${{ matrix.qt }}
           path: |
+            unity-transfer.txt
             layers.txt
             uistyle-*.txt
           if-no-files-found: warn
@@ -192,8 +197,11 @@ jobs:
         run: |
           python tests/check_fork_ui_policy.py
           python tests/check_chinese_translation.py
+          python tests/check_unity_importer.py
       - name: Build shared editor source and focused tests
-        run: qbs build profile:qt config:debug -p tiled,test_layers,test_uistyle
+        run: qbs build profile:qt config:debug -p tiled,test_layers,test_uistyle,test_unitytransfer
+      - name: Test safe Unity project transfer
+        run: qbs run profile:qt config:debug -p test_unitytransfer -- -o "$env:GITHUB_WORKSPACE/unity-transfer.txt,txt"
       - name: Run layer regressions
         run: qbs run profile:qt config:debug -p test_layers -- -o "$env:GITHUB_WORKSPACE/layers.txt,txt"
       - name: Run UI regressions at 1x and 2x
@@ -206,6 +214,7 @@ jobs:
         with:
           name: windows-layer-ui-results
           path: |
+            unity-transfer.txt
             layers.txt
             uistyle-*.txt
           if-no-files-found: warn

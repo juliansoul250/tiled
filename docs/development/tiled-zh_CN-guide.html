@@ -30,4 +30,9 @@
 <h2>九、更多资料与授权</h2>
 <ul><li><a href="https://github.com/juliansoul250/tiled/tree/fix/layer-stability-ui">本分支源码与最新构建说明</a></li><li><a href="https://doc.mapeditor.org/en/stable/">官方完整手册（英文）</a>：详细功能、文件格式和脚本 API。尚未核实有完整的官方在线简体中文手册；本页不冒充完整手册翻译。</li><li><a href="https://discourse.mapeditor.org/">官方社区论坛（主要为英文）</a></li></ul>
 <p><small>Tiled 原作者：Thorbjørn Lindeijer 及其他贡献者。完整署名见 AUTHORS，许可见 COPYING 与随附 LICENSE 文件。本版中文说明与补译不改变原项目及 Qt 的版权、商标或许可条款。</small></p>
-</main></body></html>
+</main><h2>直接导入到 Unity 2022.3</h2>
+<p>先关闭 Unity，保存所有修改过的地图、瓦片集和模板。选择“文件 → 导入到 Unity…”，选中包含 Assets、Packages、ProjectSettings 的项目根目录，展开详细信息检查清单，再确认传送。地图应为 XML TMX，外部瓦片集为 TSX，模板为 TX；推荐 CSV，不支持 zstd、JSON 地图和 oblique。</p>
+<p>应用会按需安装固定的 SuperTiled2Unity 2.4.0，并把地图与依赖送入受控的 Assets/TiledImports 子目录。不会改写 manifest.json，不覆盖未知或手动修改的文件；再次传送保留对应 Unity .meta。取消预览不写入项目。请先做好项目备份。</p>
+<p>完成后重新打开 Unity，等待其导入。文件传送成功不代表 Unity 编译或预制体生成成功；Unity 依赖包首次解析可能需要联网。当前验证不包含真实 Unity 编辑器执行。</p>
+<p><a href="unity-import-zh_CN.md">详细导入规则、限制与故障说明（中文 Markdown）</a></p>
+</body></html>

@@ -28,6 +28,7 @@ DynamicLibrary {
     cpp.cxxFlags: {
         var flags = base;
         if (qbs.toolchain.contains("msvc")) {
+            flags.push("/utf-8");
             if (Qt.core.versionMajor >= 6 && Qt.core.versionMinor >= 3)
                 flags.push("/permissive-");
         }
@@ -78,6 +79,8 @@ DynamicLibrary {
     }
 
     files: [
+        "unitytransfer.cpp",
+        "unitytransfer.h",
         "aboutdialog.cpp",
         "aboutdialog.h",
         "aboutdialog.ui",

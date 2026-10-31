@@ -177,6 +177,7 @@ private:
     void updateZoomable();
     void updateZoomActions();
     void openChineseGuide();
+    void importToUnity();
     void openDocumentation();
     void openForum();
     void aboutTiled();

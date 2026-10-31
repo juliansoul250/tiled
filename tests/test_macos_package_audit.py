@@ -1,4 +1,6 @@
 """Portable contract tests for package audit parsing and fail-closed decisions."""
+import hashlib
+import json
 import pathlib
 import plistlib
 import runpy
@@ -11,7 +13,7 @@ from unittest.mock import patch
 SCRIPT = pathlib.Path(__file__).resolve().parents[1] / 'dist/macos/verify-fork-package.py'
 
 class PackageAudit(unittest.TestCase):
-    def audit(self, *, version='6.11.3', dependency=None, uuid_mismatch=False, bad_header=False, empty_output=False, install_id=None, chinese_error=None, rpath='@executable_path/../Frameworks'):
+    def audit(self, *, version='6.11.3', dependency=None, uuid_mismatch=False, bad_header=False, empty_output=False, install_id=None, chinese_error=None, unity_error=None, rpath='@executable_path/../Frameworks'):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             app, kit, source = (root / x for x in ('Tiled.app', 'qt', 'source'))
@@ -35,6 +37,22 @@ class PackageAudit(unittest.TestCase):
                 (app / 'Contents/Resources/tiled-zh_CN-guide.html').unlink()
             elif chinese_error == 'wrong-path':
                 (app / 'Contents/Resources/qt.conf').write_text('[Paths]\nTranslations=Wrong\n')
+            unity = app / 'Contents/Resources/unity'
+            package = unity / 'com.seanba.super-tiled2unity'
+            package.mkdir(parents=True)
+            (package / 'LICENSE.md').write_bytes(b'MIT')
+            (unity / 'UPSTREAM-LICENSE').write_bytes(b'MIT')
+            record = {'commit': 'd3deae415963807caef14c522ed8be9bc30e89e0', 'files': {'LICENSE.md': hashlib.sha256(b'MIT').hexdigest()}}
+            (unity / 'SOURCE.json').write_text(json.dumps(record))
+            source_unity = source / 'thirdparty/super-tiled2unity'
+            source_unity.mkdir(parents=True)
+            (source_unity / 'SOURCE.json').write_text(json.dumps(record))
+            if unity_error == 'missing':
+                (package / 'LICENSE.md').unlink()
+            elif unity_error == 'modified':
+                (package / 'LICENSE.md').write_bytes(b'changed')
+            elif unity_error == 'extra':
+                (package / 'unexpected.cs').write_bytes(b'unknown')
             (app / 'Contents/Info.plist').write_bytes(plistlib.dumps({}))
             for p in (framework / 'QtCore', app / 'Contents/MacOS/Tiled',
                       app / 'Contents/PlugIns/platforms/libqcocoa.dylib',
@@ -86,6 +104,12 @@ class PackageAudit(unittest.TestCase):
         with self.assertRaises(RuntimeError): self.audit(chinese_error='missing-guide')
     def test_wrong_chinese_catalog_search_path_rejected(self):
         with self.assertRaises(RuntimeError): self.audit(chinese_error='wrong-path')
+    def test_unity_missing_file_rejected(self):
+        with self.assertRaises(RuntimeError): self.audit(unity_error='missing')
+    def test_unity_modified_file_rejected(self):
+        with self.assertRaises(RuntimeError): self.audit(unity_error='modified')
+    def test_unity_extra_file_rejected(self):
+        with self.assertRaises(RuntimeError): self.audit(unity_error='extra')
     def test_wrong_patch_rejected(self):
         with self.assertRaises(RuntimeError): self.audit(version='6.11.2')
     def test_wrong_kit_uuid_rejected(self):

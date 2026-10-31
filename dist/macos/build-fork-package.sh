@@ -11,6 +11,7 @@ DEPLOY="$QT_ROOT_DIR/bin/macdeployqt"
 QT_TRANSLATIONS=$("$QMAKE" -query QT_INSTALL_TRANSLATIONS)
 [[ -f "$QT_TRANSLATIONS/qtbase_zh_CN.qm" ]] || { echo 'Qt 套件缺少官方简体中文词典 qtbase_zh_CN.qm' >&2; exit 1; }
 python3 "$ROOT/tests/check_chinese_translation.py"
+python3 "$ROOT/tests/check_unity_importer.py"
 # mktemp prevents reuse of products from another SDK or diagnostic configuration.
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/tiled-package.XXXXXXXX")
 export TILED_PACKAGE_WORK="$WORK"
