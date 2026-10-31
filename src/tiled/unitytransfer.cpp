@@ -89,6 +89,9 @@ struct Collector {
         QStringList elements;
         while (!reader.atEnd() && p.error.isEmpty()) {
             reader.readNext();
+            // Invalid tokens must never reach writeCurrentToken (Qt debug asserts).
+            if (reader.hasError())
+                break;
             if (reader.isDTD() || reader.isEntityReference()) { p.error = QStringLiteral("不支持 DTD 或自定义 XML 实体，已停止导入。"); break; }
             if (!reader.isStartElement()) {
                 if (reader.isEndElement() && !elements.isEmpty()) elements.removeLast();
