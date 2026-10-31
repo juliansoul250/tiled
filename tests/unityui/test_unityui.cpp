@@ -122,8 +122,10 @@ QString TestUnityUi::drive(QAction *action, Flow flow, const QString &project,
                 complete = true;
                 chooser->reject();
             } else {
-                chooser->setDirectory(QFileInfo(project).absolutePath());
-                chooser->selectFile(project);
+                // In Directory mode the async model may clear a selected child.
+                // Navigate inside the project: an empty selection then denotes
+                // the current directory, which is verified before accepting.
+                chooser->setDirectory(project);
                 const QPointer<QFileDialog> guarded = chooser;
                 QTimer::singleShot(150, chooser, [guarded, project] {
                     if (!guarded)
