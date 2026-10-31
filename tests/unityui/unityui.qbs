@@ -7,6 +7,8 @@ TiledTest {
     bundle.isBundle: false
     install: true
     installDir: "Tiled.app/Contents/MacOS"
-    cpp.rpaths: ["@loader_path/../Frameworks"]
+    // Direct installed execution does not receive qbs run's SDK environment.
+    // QtTest is diagnostic-only and must resolve from the same selected Qt kit.
+    cpp.rpaths: ["@loader_path/../Frameworks", Qt.core.libPath]
     files: ["test_unityui.cpp"]
 }
