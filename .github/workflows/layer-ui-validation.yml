@@ -1,4 +1,4 @@
-name: Validate layer fixes on macOS and Windows
+name: 验证 macOS、Windows 与 Unity 地图导入
 
 # Confined to this public validation branch; no signing, deployment, or secrets.
 on:
