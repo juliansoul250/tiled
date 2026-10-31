@@ -7,6 +7,7 @@ Project {
         "layerwidgets",
         "uistyle",
         "unitytransfer",
+        "unityui",
         "mapreader",
         "properties",
         "staggeredrenderer",

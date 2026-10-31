@@ -55,7 +55,7 @@ jobs:
           python tests/check_chinese_translation.py
           python tests/check_unity_importer.py
       - name: Build shared editor source and focused tests
-        run: qbs build profile:qt config:debug projects.Tiled.nativeWidgetTests:true -p tiled,test_layers,test_uistyle,test_layerwidgets,test_unitytransfer
+        run: qbs build profile:qt config:debug projects.Tiled.nativeWidgetTests:true -p tiled,test_layers,test_uistyle,test_layerwidgets,test_unitytransfer,test_unityui
       - name: Test safe Unity project transfer
         run: qbs run profile:qt config:debug projects.Tiled.nativeWidgetTests:true -p test_unitytransfer -- -o "$GITHUB_WORKSPACE/unity-transfer.txt,txt"
       - name: Run layer regressions
@@ -121,6 +121,14 @@ jobs:
               subprocess.run(['defaults', 'write', *preference, '-bool', 'true'], check=True, timeout=15)
               run_test('system-opaque', ['nativeMaterialAndOpaqueFallback'], expect_reduced=True)
               subprocess.run(['defaults', 'write', *preference, '-bool', 'false'], check=True, timeout=15)
+              # Run the separate real-MainWindow fixture from the installed app,
+              # exercising exactly its production-relative importer resource path.
+              unity_ui = apps[0] / 'Contents/MacOS/test_unityui'
+              if not unity_ui.is_file():
+                  raise RuntimeError('Missing installed Unity UI integration executable')
+              with (out / 'unity-ui-console.txt').open('w') as log:
+                  subprocess.run([str(unity_ui), '-o', str(out / 'unity-ui.txt') + ',txt'],
+                                 check=True, timeout=180, stdout=log, stderr=subprocess.STDOUT)
               run_test('tests')
               subprocess.run(['python3', 'tests/native_app_smoke.py'], check=True, timeout=150)
               if os.environ.get('TILED_RUN_SOAK') == 'true':
@@ -147,9 +155,10 @@ jobs:
           reports = pathlib.Path.home() / 'Library/Logs/DiagnosticReports'
           destination = pathlib.Path('native-widget-results')
           if reports.exists():
-              for report in reports.glob('test_layerwidgets*'):
-                  if report.is_file() and report.suffix in ('.ips', '.crash'):
-                      shutil.copy2(report, destination / report.name)
+              for pattern in ('test_layerwidgets*', 'test_unityui*'):
+                  for report in reports.glob(pattern):
+                      if report.is_file() and report.suffix in ('.ips', '.crash'):
+                          shutil.copy2(report, destination / report.name)
           PYTHON
       - uses: actions/upload-artifact@v6
         if: always()

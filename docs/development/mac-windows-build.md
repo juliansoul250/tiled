@@ -14,7 +14,7 @@
 
 ### 安装正确的 Mac 包
 
-1. 进入该分支的 **Validate layer fixes on macOS and Windows** 工作流，核对提交编号，确认 **macOS 15、macOS 27、Windows 和 `macos-package` 全部通过**。本次中文化改变了源码和翻译，不能用旧英文版的通过记录替代。
+1. 进入该分支的 **验证 macOS、Windows 与 Unity 地图导入** 工作流，核对提交编号，确认 **macOS 15、macOS 27、Windows 和 `macos-package` 全部通过**。本次中文化改变了源码和翻译，不能用旧英文版的通过记录替代。
 2. 下载附件 **`Tiled-macOS-Qt6.11.3-ad-hoc`**，解压得到应用 ZIP 和 SHA256 文件。此构建目标是 **Apple Silicon / arm64（M 系列芯片）**；Intel Mac 没有通过本分支的设备验证。
 3. 在下载目录执行：
    ```sh

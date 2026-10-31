@@ -37,3 +37,7 @@
 - 原包与每个文件的 SHA256：`thirdparty/super-tiled2unity/SOURCE.json`
 - 根许可证、包内 MIT 许可证、第三方许可证、示例资源归属及原 `.meta` 均原样保留。Tiled 本体原 GPL 与作者信息不变。
 - [官方导入器文档（英文）](https://supertiled2unity.readthedocs.io/)
+
+## 自动验证的边界
+
+CI 除文件转移单元测试外，还在独立 Cocoa 测试进程中创建真实 Tiled 主窗口，从应用包内启动测试入口，点击同一个“导入到 Unity”菜单，检查取消选择、取消确认、确认传送及重复更新，并使用应用包内真实的固定导入器文件。对话框仅在测试进程采用可自动操作的 Qt 文件选择器；正常应用仍使用系统默认对话框。此验证不启动 Unity Editor，也不能替代 Unity 侧的编译、预制体和场景验收。
