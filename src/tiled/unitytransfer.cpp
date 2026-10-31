@@ -119,7 +119,11 @@ struct Collector {
                     if ((tag == QStringLiteral("tileset") && QFileInfo(value).suffix().toLower() != QStringLiteral("tsx")) || (key == QStringLiteral("template") && QFileInfo(value).suffix().toLower() != QStringLiteral("tx"))) { p.error = QStringLiteral("外部瓦片集必须是 TSX，模板必须是 TX（XML）。"); break; }
                     const QString target = collect(QDir(info.absolutePath()).absoluteFilePath(value));
                     if (!p.error.isEmpty()) break;
-                    value = QDir(QFileInfo(name).path()).relativeFilePath(target);
+                    // Both paths must be absolute: QDir::relativeFilePath leaves a
+                    // relative target unchanged instead of resolving it from our layout.
+                    const QDir layout(p.projectPath);
+                    const QString sourceDirectory = QFileInfo(layout.absoluteFilePath(name)).absolutePath();
+                    value = QDir(sourceDirectory).relativeFilePath(layout.absoluteFilePath(target));
                 }
                 writer.writeAttribute(key, value);
             }

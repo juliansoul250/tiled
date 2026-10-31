@@ -37,7 +37,7 @@ struct Fixture {
         put(source + QStringLiteral("/images/tile.png"), "PNG fixture");
         put(source + QStringLiteral("/tiles/terrain.tsx"), "<?xml version=\"1.0\"?><tileset name=\"test\" tilewidth=\"16\" tileheight=\"16\"><image source=\"../images/tile.png\" width=\"16\" height=\"16\"/></tileset>");
         put(source + QStringLiteral("/templates/object.tx"), "<template><tileset firstgid=\"1\" source=\"../tiles/terrain.tsx\"/><object gid=\"1\"/></template>");
-        put(map, "<map orientation=\"orthogonal\" width=\"1\" height=\"1\" tilewidth=\"16\" tileheight=\"16\"><tileset firstgid=\"1\" source=\"tiles/terrain.tsx\"/><objectgroup><object id=\"1\" template=\"templates/object.tx\"/></objectgroup></map>");
+        put(map, "<map orientation=\"orthogonal\" width=\"1\" height=\"1\" tilewidth=\"16\" tileheight=\"16\"><tileset firstgid=\"1\" source=\"tiles/terrain.tsx\"/><objectgroup><object id=\"1\" template=\"templates/object.tx\"/></objectgroup><properties><property name=\"preview\" type=\"file\" value=\"images/tile.png\"/></properties></map>");
     }
     Plan preview() { return plan(map, project, package); }
 };
@@ -77,8 +77,21 @@ void TestUnityTransfer::recursiveDependenciesAndUnicode() {
         QXmlStreamReader xml(it.value());
         while (!xml.atEnd()) {
             xml.readNext(); if (!xml.isStartElement()) continue;
-            for (const auto &attribute : xml.attributes()) if (attribute.name() == QStringLiteral("source") || attribute.name() == QStringLiteral("template"))
-                QVERIFY(QFileInfo::exists(QDir(QFileInfo(QDir(p.destinationPath).filePath(it.key())).absolutePath()).filePath(attribute.value().toString())));
+            for (const auto &attribute : xml.attributes()) {
+                const bool fileProperty = xml.name() == QStringLiteral("property")
+                        && xml.attributes().value(QStringLiteral("type")) == QStringLiteral("file")
+                        && attribute.name() == QStringLiteral("value");
+                if (attribute.name() != QStringLiteral("source") && attribute.name() != QStringLiteral("template") && !fileProperty)
+                    continue;
+                const QString reference = attribute.value().toString();
+                const QDir sourceDirectory(QFileInfo(QDir(p.destinationPath).filePath(it.key())).absolutePath());
+                const QString resolved = QDir::cleanPath(sourceDirectory.absoluteFilePath(reference));
+                const QString diagnostic = QStringLiteral("%1: %2=%3 resolves to missing dependency %4")
+                        .arg(it.key(), attribute.name().toString(), reference, resolved);
+                QVERIFY2(!QDir::isAbsolutePath(reference), qPrintable(diagnostic));
+                QVERIFY2(QFileInfo::exists(resolved), qPrintable(diagnostic));
+                QVERIFY2(resolved.startsWith(p.destinationPath + QLatin1Char('/')), qPrintable(diagnostic));
+            }
         }
         QVERIFY(!xml.hasError());
     }
