@@ -34,7 +34,13 @@ qbs build @Common -d "$Work/diagnostic-build" 'projects.Tiled.nativeWidgetTests:
 foreach ($Test in @('test_unitytransfer','test_layers','test_uistyle')) {
     qbs run @Common -d "$Work/diagnostic-build" 'projects.Tiled.nativeWidgetTests:true' -p $Test -- -o "$Results/$Test.txt,txt"
 }
-qbs install @Common -d "$Work/diagnostic-build" --install-root $Diagnostic 'projects.Tiled.nativeWidgetTests:true' -p tiled,test_unityui
+qbs install @Common -d "$Work/diagnostic-build" --install-root $Diagnostic 'projects.Tiled.nativeWidgetTests:true' -p tiled,test_unityui,libtilededitor,libtiled,translations
+# Diagnose the installed layout before Qt deployment or GUI startup.
+foreach ($Required in @('tiled.exe','test_unityui.exe','tilededitor.dll','libtiled.dll','translations/tiled_zh_CN.qm','unity/SOURCE.json','unity/com.seanba.super-tiled2unity/package.json','doc/tiled-zh_CN-guide.html')) {
+    if (-not (Test-Path (Join-Path $Diagnostic $Required) -PathType Leaf)) { throw "诊断安装缺少文件：$Required" }
+}
+# The fixture supplies its own temporary INI; portable settings belong only to production.
+if (Test-Path "$Diagnostic/tiled.ini") { throw '诊断目录不能带覆盖隔离设置的 tiled.ini' }
 # A wholly separate build ensures test executables and diagnostic flags never ship.
 qbs install @Common -d "$Work/production-build" --install-root $Stage 'projects.Tiled.nativeWidgetTests:false'
 $Help = (& $Deploy --help | Out-String)
