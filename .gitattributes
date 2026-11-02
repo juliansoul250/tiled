@@ -17,3 +17,6 @@
 
 # Preserve the pinned importer's upstream bytes on every checkout platform.
 thirdparty/super-tiled2unity/** -text
+
+# Preserve pinned Qt license/attribution bytes on Windows checkout.
+thirdparty/qt-licenses-6.11.3/** -text

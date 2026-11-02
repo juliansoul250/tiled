@@ -14,6 +14,17 @@ spec.loader.exec_module(audit)
 
 
 class WindowsAudit(unittest.TestCase):
+    def test_windows_builtin_icu_requires_system_file(self):
+        self.dependencies['tiled.exe'] = ['icuuc.dll']
+        with self.assertRaises(RuntimeError):
+            self.run_audit()
+        self.put(self.system, 'icuuc.dll')
+        self.run_audit()
+        self.dependencies['tiled.exe'] = ['icuuc99.dll']
+        self.put(self.system, 'icuuc99.dll')
+        with self.assertRaises(RuntimeError):
+            self.run_audit()
+
     def test_loaded_runtime_classification(self):
         smoke_path = Path(__file__).with_name('windows_app_smoke.py')
         smoke_spec = importlib.util.spec_from_file_location('windows_smoke_contract', smoke_path)
@@ -170,8 +181,16 @@ class WindowsAudit(unittest.TestCase):
                          'doc/unity-import-zh_CN.md', 'AUTHORS', 'COPYING',
                          'LICENSE.GPL', 'LICENSE.APACHE', 'LICENSE.BSD'):
             self.put(self.root, relative)
-        self.put(self.kit, 'licenses/LICENSE.LGPL3')
-        self.put(self.root, 'licenses/Qt/LICENSE.LGPL3')
+        license_files = {}
+        for module in audit.QT_LICENSE_COMMITS:
+            name = module + '/LICENSES/LGPL-3.0-only.txt'
+            original = self.put(self.source, 'thirdparty/qt-licenses-6.11.3/' + name)
+            self.put(self.root, 'licenses/Qt/' + name)
+            license_files[name] = audit.sha(original)
+        record = {'version': audit.QT_VERSION, 'commits': audit.QT_LICENSE_COMMITS, 'files': license_files}
+        encoded = json.dumps(record).encode()
+        self.put(self.source, 'thirdparty/qt-licenses-6.11.3/SOURCE.json', encoded)
+        self.put(self.root, 'licenses/Qt/SOURCE.json', encoded)
         self.put(self.kit, 'translations/qtbase_zh_CN.qm')
         self.put(self.kit, 'translations/qt_zh_CN.qm')
         self.put(self.root, 'qt.conf', b'[Paths]\nPrefix=.\nPlugins=.\nTranslations=translations\n')
@@ -205,7 +224,19 @@ class WindowsAudit(unittest.TestCase):
 
     def test_missing_qt_license_rejected(self):
         self.data_fixture()
-        (self.root / 'licenses/Qt/LICENSE.LGPL3').unlink()
+        (self.root / 'licenses/Qt/qtbase/LICENSES/LGPL-3.0-only.txt').unlink()
+        with self.assertRaisesRegex(RuntimeError, 'Qt 许可证'):
+            audit.audit_data(self.root, self.kit, self.source)
+
+    def test_wrong_qt_license_source_rejected(self):
+        self.data_fixture()
+        self.put(self.source, 'thirdparty/qt-licenses-6.11.3/qtbase/LICENSES/LGPL-3.0-only.txt', b'changed')
+        with self.assertRaisesRegex(RuntimeError, 'Qt 许可证'):
+            audit.audit_data(self.root, self.kit, self.source)
+
+    def test_unknown_qt_license_file_rejected(self):
+        self.data_fixture()
+        self.put(self.root, 'licenses/Qt/untracked.txt')
         with self.assertRaisesRegex(RuntimeError, 'Qt 许可证'):
             audit.audit_data(self.root, self.kit, self.source)
 

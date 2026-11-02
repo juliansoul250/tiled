@@ -40,7 +40,8 @@ qbs install @Common -d "$Work/production-build" --install-root $Stage 'projects.
 $Help = (& $Deploy --help | Out-String)
 $NoPatch = if ($Help -match '--no-patchqt\b') { '--no-patchqt' } elseif ($Help -match '--nopatchqt\b') { '--nopatchqt' } else { throw 'Qt 部署工具不支持保留原始 DLL 校验' }
 function Deploy-App([string]$Directory, [bool]$IsDiagnostic) {
-    $Targets = @(Get-ChildItem $Directory -Filter '*.exe' | ForEach-Object FullName)
+    # Scan our own DLLs/plugins too: windeployqt does not infer all third-party DLL dependencies.
+    $Targets = @(Get-ChildItem $Directory -Recurse -File | Where-Object { $_.Extension -in '.exe','.dll' } | ForEach-Object FullName)
     & $Deploy --release $NoPatch --no-compiler-runtime --no-translations --dir $Directory @Targets 2>&1 | Tee-Object "$Results/deploy-$IsDiagnostic.log"
     Copy-Item "$env:TILED_VC_REDIST_DIR/*.dll" $Directory
     New-Item -ItemType Directory -Force "$Directory/translations" | Out-Null
@@ -48,7 +49,7 @@ function Deploy-App([string]$Directory, [bool]$IsDiagnostic) {
     Set-Content -Encoding utf8 "$Directory/qt.conf" "[Paths]`nPrefix=.`nPlugins=.`nTranslations=translations"
     Copy-Item "$Root/AUTHORS","$Root/COPYING","$Root/LICENSE.*" $Directory
     New-Item -ItemType Directory -Force "$Directory/licenses/Qt" | Out-Null
-    Copy-Item "$Kit/licenses/*" "$Directory/licenses/Qt/" -Recurse
+    Copy-Item "$Root/thirdparty/qt-licenses-6.11.3/*" "$Directory/licenses/Qt/" -Recurse
     Copy-Item "$Root/docs/development/windows-portable-zh_CN.md" "$Directory/使用说明.md"
     # Preserve symbols separately, not as part of the portable application.
     $Symbols = Join-Path $Work ('symbols-' + $IsDiagnostic)

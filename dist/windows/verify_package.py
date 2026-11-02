@@ -14,12 +14,18 @@ import re
 import subprocess
 
 QT_VERSION = '6.11.3'
+QT_LICENSE_COMMITS = {
+    'qtbase': '138f955f0b5e50e4a6c2ee1e78a2279db52ae9e3',
+    'qtdeclarative': '95e4ceccb77c82411f8a048eda4360e5967f4e60',
+    'qtsvg': 'f5d99721911e4a1989965a087813cf1277519bc6',
+    'qtimageformats': '434c41f81a825e0abcda13ff93ef30bc0e155d1d',
+}
 UNITY_COMMIT = 'd3deae415963807caef14c522ed8be9bc30e89e0'
 # Windows OS components only; notably excludes VC redistributables and Qt.
 SYSTEM_DLLS = set('''advapi32 avrt bcrypt bcryptprimitives cabinet cfgmgr32 comctl32
 comdlg32 credui crypt32 cryptbase cryptnet cryptsp d2d1 d3d9 d3d11 d3d12 dbghelp
  dcomp dnsapi dwmapi dwrite dxgi dxguid dxva2 gdi32 gdi32full hid imm32 iphlpapi
- kernel32 kernelbase msvcrt mpr msimg32 mswsock ncrypt netapi32 normaliz ntdll ole32
+ kernel32 kernelbase msvcrt icuuc icuin icu mpr msimg32 mswsock ncrypt netapi32 normaliz ntdll ole32
  oleacc oleaut32 opengl32 powrprof propsys psapi rasapi32 rpcrt4 secur32 setupapi
  shell32 shcore shlwapi user32 userenv uiautomationcore usp10 uxtheme version winhttp wininet
  winmm winspool wintrust wldap32 ws2_32 wtsapi32 ucrtbase msasn1 mf mfplat
@@ -139,12 +145,20 @@ def audit_data(root, kit, source):
         require(conf.get('Paths', key, fallback='') == expected, f'qt.conf {key} 不正确')
     for name in ('qtbase_zh_CN.qm', 'qt_zh_CN.qm'):
         require(sha(root / 'translations' / name) == sha(kit / 'translations' / name), f'Qt 中文词典不是所选套件：{name}')
-    qt_license_source = safe_files(kit / 'licenses')
+    license_root = source / 'thirdparty/qt-licenses-6.11.3'
+    license_record = json.loads((license_root / 'SOURCE.json').read_text(encoding='utf-8'))
+    require(license_record.get('version') == QT_VERSION and
+            license_record.get('commits') == QT_LICENSE_COMMITS, 'Qt 许可证来源不是固定的同版官方提交')
+    qt_license_source = safe_files(license_root)
+    license_hashes = {p.relative_to(license_root).as_posix(): sha(p)
+                      for p in qt_license_source.values() if p != license_root / 'SOURCE.json'}
+    require(license_hashes and license_hashes == license_record.get('files'), 'Qt 许可证来源文件校验失败')
+    for module in QT_LICENSE_COMMITS:
+        require(any(n.startswith(module + '/LICENSES/') for n in license_hashes),
+                f'Qt 许可证缺少组件：{module}')
     qt_license_deployed = safe_files(root / 'licenses/Qt')
-    require(qt_license_source and
-            {n: sha(p) for n, p in qt_license_source.items()} ==
-            {n: sha(p) for n, p in qt_license_deployed.items()},
-            'Qt 许可证缺失或与所选套件不一致')
+    require({n: sha(p) for n, p in qt_license_source.items()} ==
+            {n: sha(p) for n, p in qt_license_deployed.items()}, 'Qt 许可证缺失或与固定官方来源不一致')
     vendor = root / 'unity'
     record = json.loads((vendor / 'SOURCE.json').read_text(encoding='utf-8'))
     original = json.loads((source / 'thirdparty/super-tiled2unity/SOURCE.json').read_text(encoding='utf-8'))
