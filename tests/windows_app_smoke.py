@@ -5,6 +5,7 @@ import ctypes
 from ctypes import wintypes
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -25,6 +26,13 @@ def isolated_environment(results):
     return env
 
 
+# msvcp_win.dll is a Windows component, not the versioned VC redistributable.
+VC_DLL = re.compile(r"^(?:vcruntime\d+|msvcp\d+|concrt\d+|vcomp\d+)(?:_[a-z0-9]+)*\.dll$", re.I)
+
+def requires_app_local(name):
+    name = name.lower()
+    return name.startswith("qt6") or name == "qwindows.dll" or bool(VC_DLL.fullmatch(name))
+
 def modules(pid, app):
     app = app.resolve()
     windows = Path(os.environ['SystemRoot']).resolve()
@@ -36,7 +44,7 @@ def modules(pid, app):
         if not local and not path.is_relative_to(windows):
             raise RuntimeError('Loaded module outside application / Windows: ' + text)
         name = path.name.lower()
-        if name.startswith(('qt6', 'vcruntime', 'msvcp', 'concrt')) or name == 'qwindows.dll':
+        if requires_app_local(name):
             if not local:
                 raise RuntimeError('Qt / VC runtime was not loaded from portable app: ' + text)
     for required in ('qt6core.dll', 'qt6widgets.dll', 'qwindows.dll'):

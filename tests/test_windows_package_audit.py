@@ -14,6 +14,18 @@ spec.loader.exec_module(audit)
 
 
 class WindowsAudit(unittest.TestCase):
+    def test_loaded_runtime_classification(self):
+        smoke_path = Path(__file__).with_name('windows_app_smoke.py')
+        smoke_spec = importlib.util.spec_from_file_location('windows_smoke_contract', smoke_path)
+        smoke = importlib.util.module_from_spec(smoke_spec)
+        # This contract only tests name classification, not third-party GUI APIs.
+        with patch.dict('sys.modules', {'psutil': SimpleNamespace(), 'PIL': SimpleNamespace(ImageGrab=None)}):
+            smoke_spec.loader.exec_module(smoke)
+        self.assertFalse(smoke.requires_app_local('msvcp_win.dll'))
+        for name in ('msvcp140.dll', 'MSVCP140_1.DLL', 'vcruntime140_1.dll',
+                     'concrt140.dll', 'vcomp140.dll', 'Qt6Core.dll', 'qwindows.dll'):
+            self.assertTrue(smoke.requires_app_local(name), name)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
