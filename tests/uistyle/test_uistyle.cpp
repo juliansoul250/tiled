@@ -1,6 +1,7 @@
 #include "tiledproxystyle.h"
 #include "iconcheckdelegate.h"
 #include "utils.h"
+#include "stylehelper.h"
 
 #include <QApplication>
 #include <QImage>
@@ -18,6 +19,7 @@ class test_UiStyle : public QObject
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void paletteSwitching();
     void comfortableMetrics();
     void toolButtonStates_data();
@@ -31,6 +33,17 @@ private slots:
     void visibilityIconsUnchanged();
     void darkCheckboxOutline();
 };
+
+void test_UiStyle::initTestCase()
+{
+    // Reference an exported editor symbol so MSVC release linking retains the
+    // resource-owning DLL even though this fixture compiles the paint helpers.
+    qInfo() << "Editor resource owner:" << StyleHelper::staticMetaObject.className();
+    for (const auto name : {"locked", "unlocked", "visible", "hidden"}) {
+        const auto path = QStringLiteral(":/images/24/%1.png").arg(QString::fromLatin1(name));
+        QVERIFY2(!QImage(path).isNull(), qPrintable(path));
+    }
+}
 
 static QPalette editorPalette(bool dark)
 {
