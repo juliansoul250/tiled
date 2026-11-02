@@ -276,6 +276,9 @@ jobs:
         with:
           version: '6.11.3'
           arch: win64_msvc2022_64
+          setup-python: false
+          # Upstream PR #1000: Qt 6.11+ Windows architecture-specific repositories.
+          aqtsource: git+https://github.com/miurahr/aqtinstall.git@8c3695d4a4e1ceabf6a74dc6c79681656dc6b74b
           modules: qtimageformats
           cache: true
       - name: 安装构建和验证工具（不随应用发布）
