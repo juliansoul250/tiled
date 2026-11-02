@@ -1,8 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Exercise the actual MainWindow action and modal workflow, not a backend proxy.
  */
-#include "document.h"
-#include "documentmanager.h"
 #include "mainwindow.h"
 #include "pluginmanager.h"
 #include "preferences.h"
@@ -22,6 +20,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMessageBox>
+#include <QMenu>
 #include <QPointer>
 #include <QPushButton>
 #include <QSettings>
@@ -29,6 +28,7 @@
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QUndoCommand>
+#include <QUndoGroup>
 #include <QUndoStack>
 #include <QXmlStreamReader>
 #include <QtTest>
@@ -159,9 +159,12 @@ QString TestUnityUi::drive(QAction *action, Flow flow, const QString &project,
             return;
         }
         if (stage == 1 && message->icon() == QMessageBox::Question) {
-            if (message->defaultButton() != message->button(QMessageBox::Cancel)
+            const auto cancelButton = message->button(QMessageBox::Cancel);
+            if (!cancelButton || message->defaultButton() != cancelButton
                     || message->detailedText().isEmpty()
-                    || !message->detailedText().contains(QStringLiteral("Assets/TiledImports"))) {
+                    || !message->detailedText().contains(QStringLiteral("Assets/TiledImports"))
+                    || !message->text().contains(QStringLiteral("地图及其依赖资源"))
+                    || !cancelButton->text().contains(QStringLiteral("取消"))) {
                 error = QStringLiteral("Preview is missing its safe default or actual managed-file list");
                 message->reject();
                 return;
@@ -178,7 +181,8 @@ QString TestUnityUi::drive(QAction *action, Flow flow, const QString &project,
             return;
         }
         if (stage == 2 && flow == ConfirmImport && message->icon() == QMessageBox::Information) {
-            if (!message->text().contains(QStringLiteral("Unity 2022.3")))
+            if (!message->text().contains(QStringLiteral("Unity 2022.3"))
+                    || !message->text().contains(QStringLiteral("文件已送入 Unity 项目")))
                 error = QStringLiteral("Unexpected success message");
             if (!capture(*message, captureStem + QStringLiteral("-success")))
                 error = QStringLiteral("Failed to capture the actual completion message");
@@ -202,12 +206,37 @@ QString TestUnityUi::drive(QAction *action, Flow flow, const QString &project,
 
 void TestUnityUi::nativeActionWorkflow()
 {
+#ifdef Q_OS_WIN
+    QCOMPARE(QGuiApplication::platformName(), QStringLiteral("windows"));
+#else
     QCOMPARE(QGuiApplication::platformName(), QStringLiteral("cocoa"));
+#endif
+    QCOMPARE(QString::fromLatin1(qVersion()), QStringLiteral("6.11.3"));
+    qInfo() << "Native Unity UI platform:" << QGuiApplication::platformName()
+            << "Qt:" << qVersion();
     QVERIFY(QTest::qWaitForWindowExposed(&mWindow));
     mWindow.raise();
     mWindow.activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(&mWindow));
-    QVERIFY(QDir::cleanPath(QCoreApplication::applicationDirPath()).endsWith(QStringLiteral("Tiled.app/Contents/MacOS")));
+    const QDir applicationDirectory(QCoreApplication::applicationDirPath());
+#ifdef Q_OS_WIN
+    QVERIFY(QFileInfo::exists(applicationDirectory.filePath(QStringLiteral("tiled.exe"))));
+    const QString bundledRoot = applicationDirectory.filePath(QStringLiteral("unity"));
+    const QString appCatalog = applicationDirectory.filePath(QStringLiteral("translations/tiled_zh_CN.qm"));
+#else
+    QVERIFY(QDir::cleanPath(applicationDirectory.absolutePath()).endsWith(QStringLiteral("Tiled.app/Contents/MacOS")));
+    const QString bundledRoot = applicationDirectory.filePath(QStringLiteral("../Resources/unity"));
+    const QString appCatalog = applicationDirectory.filePath(QStringLiteral("../Translations/tiled_zh_CN.qm"));
+#endif
+    QVERIFY(QFileInfo::exists(appCatalog));
+    QVERIFY(QFileInfo::exists(bundledRoot + QStringLiteral("/SOURCE.json")));
+    QCOMPARE(Preferences::instance()->language(), QStringLiteral("zh_CN"));
+    auto fileMenu = mWindow.findChild<QMenu *>(QStringLiteral("menuFile"));
+    QVERIFY(fileMenu);
+    QVERIFY(fileMenu->title().contains(QStringLiteral("文件")));
+    QCOMPARE(QCoreApplication::translate("QPlatformTheme", "Cancel"), QStringLiteral("取消"));
+    qInfo().noquote() << QStringLiteral("Chinese UI verified: ") + fileMenu->title()
+                        + QStringLiteral("; Qt Cancel=取消; language=zh_CN");
     const QString project = mRoot + QStringLiteral("/中文 Unity 项目");
     const QString source = mRoot + QStringLiteral("/地图 源文件");
     const QString mapPath = source + QStringLiteral("/测试地图.tmx");
@@ -234,20 +263,24 @@ void TestUnityUi::nativeActionWorkflow()
     QVERIFY2(error.isEmpty(), qPrintable(error));
     QCOMPARE(snapshot(project), unchanged);
 
-    auto document = DocumentManager::instance()->currentDocument();
-    QVERIFY(document);
-    document->undoStack()->push(new QUndoCommand(QStringLiteral("Test-only dirty marker")));
-    QVERIFY(document->isModified());
+    // Use the live Qt undo group rather than editor-private DLL symbols. This
+    // still changes the actual current document's dirty state through its stack.
+    auto undoGroup = mWindow.findChild<QUndoGroup *>();
+    QVERIFY(undoGroup);
+    auto undoStack = undoGroup->activeStack();
+    QVERIFY(undoStack);
+    QVERIFY(undoStack->isClean());
+    undoStack->push(new QUndoCommand(QStringLiteral("Test-only dirty marker")));
+    QVERIFY(!undoStack->isClean());
     error = drive(action, DirtyWarning, project, QStringLiteral("unity-dirty"));
-    document->undoStack()->undo(); // Restore clean state before any assertion exit.
+    undoStack->undo(); // Restore clean state before any assertion exit.
     QVERIFY2(error.isEmpty(), qPrintable(error));
-    QVERIFY(!document->isModified());
+    QVERIFY(undoStack->isClean());
     QCOMPARE(snapshot(project), unchanged);
 
     error = drive(action, ConfirmImport, project, QStringLiteral("unity-confirm"));
     QVERIFY2(error.isEmpty(), qPrintable(error));
     const QString packageRoot = project + QStringLiteral("/Packages/com.seanba.super-tiled2unity");
-    const QString bundledRoot = QCoreApplication::applicationDirPath() + QStringLiteral("/../Resources/unity");
     const auto provenance = QJsonDocument::fromJson(readFile(bundledRoot + QStringLiteral("/SOURCE.json"))).object();
     const auto hashes = provenance.value(QStringLiteral("files")).toObject();
     QCOMPARE(hashes.size(), 582);
