@@ -5,7 +5,10 @@ TiledTest {
                && (qbs.targetOS.contains("macos") || qbs.targetOS.contains("windows"))
     Depends { name: "libtilededitor" }
     Depends { name: "Qt.widgets" }
-    bundle.isBundle: false
+    Properties {
+        condition: qbs.targetOS.contains("macos")
+        bundle.isBundle: false
+    }
     install: true
     installDir: qbs.targetOS.contains("windows") ? "" : "Tiled.app/Contents/MacOS"
     // Direct installed execution does not receive qbs run's SDK environment.
