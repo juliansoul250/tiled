@@ -14,6 +14,20 @@ spec.loader.exec_module(audit)
 
 
 class WindowsAudit(unittest.TestCase):
+    def test_all_missing_dependencies_are_reported_without_passing(self):
+        self.dependencies['tiled.exe'] = ['first.dll', 'second.dll']
+        with self.assertRaises(RuntimeError) as result:
+            self.run_audit()
+        self.assertIn('first.dll', str(result.exception))
+        self.assertIn('second.dll', str(result.exception))
+
+    def test_imagehlp_is_a_real_system_file_requirement(self):
+        self.dependencies['tiled.exe'] = ['imagehlp.dll']
+        with self.assertRaises(RuntimeError):
+            self.run_audit()
+        self.put(self.system, 'imagehlp.dll')
+        self.run_audit()
+
     def test_windows_builtin_icu_requires_system_file(self):
         self.dependencies['tiled.exe'] = ['icuuc.dll']
         with self.assertRaises(RuntimeError):

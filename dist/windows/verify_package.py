@@ -24,7 +24,7 @@ UNITY_COMMIT = 'd3deae415963807caef14c522ed8be9bc30e89e0'
 # Windows OS components only; notably excludes VC redistributables and Qt.
 SYSTEM_DLLS = set('''advapi32 avrt bcrypt bcryptprimitives cabinet cfgmgr32 comctl32
 comdlg32 credui crypt32 cryptbase cryptnet cryptsp d2d1 d3d9 d3d11 d3d12 dbghelp
- dcomp dnsapi dwmapi dwrite dxgi dxguid dxva2 gdi32 gdi32full hid imm32 iphlpapi
+ dcomp dnsapi dwmapi dwrite dxgi dxguid dxva2 gdi32 gdi32full hid imagehlp imm32 iphlpapi
  kernel32 kernelbase msvcrt icuuc icuin icu mpr msimg32 mswsock ncrypt netapi32 normaliz ntdll ole32
  oleacc oleaut32 opengl32 powrprof propsys psapi rasapi32 rpcrt4 secur32 setupapi
  shell32 shcore shlwapi user32 userenv uiautomationcore usp10 uxtheme version winhttp wininet
@@ -89,6 +89,7 @@ def audit_imports(root, kit, vc_redist, *, inspect=pe_imports, system32=None):
                 kit_files.setdefault(file.name.lower(), []).append(file)
     vc_files = {p.name.lower(): p for p in vc_redist.glob('*.dll') if p.is_file()}
     checked = {}
+    dependency_errors = []
     for relative, binary in files.items():
         if binary.suffix.lower() not in ('.dll', '.exe'):
             continue
@@ -106,23 +107,27 @@ def audit_imports(root, kit, vc_redist, *, inspect=pe_imports, system32=None):
                     f'VC 运行库必须来自指定官方 redist 并放于应用根目录：{relative}')
         imports = inspect(binary)
         for dependency in imports:
-            dependency = dependency.lower()
-            require(re.fullmatch(r'[a-z0-9_.-]+\.dll', dependency), f'非法 DLL 名称：{dependency}')
-            require(not DEBUG_DLL.fullmatch(dependency), f'导入了调试 DLL：{relative}: {dependency}')
-            local = files.get(dependency)
-            sibling_key = (binary.parent.relative_to(root) / dependency).as_posix().lower()
-            sibling = files.get(sibling_key)
-            if VC_DLL.fullmatch(dependency):
-                require(local is not None and dependency in vc_files,
-                        f'缺少应用本地 VC 运行库：{relative}: {dependency}')
-            elif local or sibling:
-                pass  # Every deployed PE is separately audited, including its imports.
-            elif dependency.startswith(('api-ms-win-', 'ext-ms-win-')):
-                pass  # OS API-set contracts, resolved by Windows rather than a disk DLL.
-            else:
-                require(dependency[:-4] in SYSTEM_DLLS and (system32 / dependency).is_file(),
-                        f'缺少依赖或依赖不属于允许的系统 DLL：{relative}: {dependency}')
+            try:
+                dependency = dependency.lower()
+                require(re.fullmatch(r'[a-z0-9_.-]+\.dll', dependency), f'非法 DLL 名称：{dependency}')
+                require(not DEBUG_DLL.fullmatch(dependency), f'导入了调试 DLL：{relative}: {dependency}')
+                local = files.get(dependency)
+                sibling_key = (binary.parent.relative_to(root) / dependency).as_posix().lower()
+                sibling = files.get(sibling_key)
+                if VC_DLL.fullmatch(dependency):
+                    require(local is not None and dependency in vc_files,
+                            f'缺少应用本地 VC 运行库：{relative}: {dependency}')
+                elif local or sibling:
+                    pass  # Every deployed PE is separately audited, including its imports.
+                elif dependency.startswith(('api-ms-win-', 'ext-ms-win-')):
+                    pass  # OS API-set contracts, resolved by Windows rather than a disk DLL.
+                else:
+                    require(dependency[:-4] in SYSTEM_DLLS and (system32 / dependency).is_file(),
+                            f'缺少依赖或依赖不属于允许的系统 DLL：{relative}: {dependency}')
+            except RuntimeError as error:
+                dependency_errors.append(str(error))
         checked[relative] = {'sha256': sha(binary), 'imports': sorted(set(imports))}
+    require(not dependency_errors, '\n'.join(dependency_errors))
     require(checked, '没有可审核的 PE 文件')
     return checked
 
