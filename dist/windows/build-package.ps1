@@ -1,6 +1,9 @@
 # Build on a disposable Windows runner; no signing keys or user settings are used.
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
+# Redirected Python output otherwise uses the runner's legacy Windows code page.
+$env:PYTHONUTF8 = '1'
+$env:PYTHONIOENCODING = 'utf-8'
 $Root = (Resolve-Path "$PSScriptRoot/../..").Path
 $Kit = (Resolve-Path $env:QT_ROOT_DIR).Path
 $Qmake = Join-Path $Kit 'bin/qmake.exe'
