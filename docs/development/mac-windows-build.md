@@ -15,7 +15,7 @@
 ### 安装正确的 Mac 包
 
 1. 进入该分支的 **验证 macOS、Windows 与 Unity 地图导入** 工作流，核对提交编号，确认 **macOS 15、macOS 27、Windows 和 `macos-package` 全部通过**。本次中文化改变了源码和翻译，不能用旧英文版的通过记录替代。
-2. 下载附件 **`Tiled-macOS-Qt6.11.3-ad-hoc`**，解压得到应用 ZIP 和 SHA256 文件。此构建目标是 **Apple Silicon / arm64（M 系列芯片）**；Intel Mac 没有通过本分支的设备验证。
+2. 下载附件 **`Tiled-macOS-Qt6.11.3-ad-hoc`**，解压得到应用 ZIP 和 SHA256 文件。此构建目标是 **Apple Silicon / arm64（M 系列芯片）**；Intel 兼容性 CI 使用 macOS 15 x64（须以对应提交的成功记录为准），但此附件不是 Intel 安装包，也不代表所有 Intel 设备均已验证。
 3. 在下载目录执行：
    ```sh
    shasum -a 256 Tiled-macOS-Qt6.11.3-ad-hoc.zip
@@ -110,3 +110,5 @@ Windows 在本流程中验证源码构建、图层和绘制回归；**没有因�
 GitHub 官方公告 macOS 14 托管镜像将于 2026 年 11 月 2 日退役，退役前减少容量并安排停机演练。因此本次中文版本的兼容性测试改用标准 `macos-15`，保持相同 Qt 6.11.3、原生界面和中文断言；用户系统对应的 `xcode-27` 与全部 15 分钟验证不变。旧版本 macOS 14 的历史通过记录仍保留，但不能当作本次中文版本在 macOS 14 上通过。首次中文构建的两次 macOS 14 作业均未分配运行器，未执行任何测试。
 
 参考：[GitHub 官方 macOS 14 镜像退役公告](https://github.blog/changelog/2026-10-01-github-actions-macos-14-runner-image-retirement/)。
+
+2026-11-02：标准 `macos-15` 在同一提交的首次及重试作业中均未分配运行器，未执行测试；兼容性作业改为官方标准免费 `macos-15-intel`（macOS 15 x64）。Qt 6.11.3 `clang_64` 工具包、全部测试与断言保持不变，`xcode-27` 的 arm64 主目标和 15 分钟验证不变。交付仍要求同一提交的全部五项作业成功，不能将排队或取消计为通过。此变更不增加 Intel 成品包。

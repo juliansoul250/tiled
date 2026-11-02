@@ -28,7 +28,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, xcode-27]
+        # Standard Intel capacity after two unassigned macos-15 jobs; retain all OS 15 checks.
+        os: [macos-15-intel, xcode-27]
         qt: ['6.11.3']
     timeout-minutes: 60
     env:
