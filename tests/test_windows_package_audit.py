@@ -14,6 +14,22 @@ spec.loader.exec_module(audit)
 
 
 class WindowsAudit(unittest.TestCase):
+    def test_chinese_runtime_evidence_requires_catalogs_and_actual_label(self):
+        smoke_spec = importlib.util.spec_from_file_location('windows_smoke_evidence',
+            Path(__file__).with_name('windows_app_smoke.py'))
+        smoke = importlib.util.module_from_spec(smoke_spec)
+        with patch.dict('sys.modules', {'psutil': SimpleNamespace(), 'PIL': SimpleNamespace(ImageGrab=None)}):
+            smoke_spec.loader.exec_module(smoke)
+        log = self.base / 'runtime.txt'
+        valid = 'language=zh_CN app=1 qt=1\nUnity transfer menu UTF-8 hex: ' + '导入到 Unity…'.encode('utf-8').hex()
+        for invalid in ('', valid + '00', valid.replace('app=1', 'app=0'), valid.replace('qt=1', 'qt=0'),
+                        'language=zh_CN app=1 qt=1\nUnity transfer menu UTF-8 hex: ' + 'Import into Unity...'.encode().hex()):
+            log.write_text(invalid, encoding='utf-8')
+            with self.assertRaises(RuntimeError):
+                smoke.verify_chinese_log(log)
+        log.write_text(valid, encoding='utf-8')
+        smoke.verify_chinese_log(log)
+
     def test_all_missing_dependencies_are_reported_without_passing(self):
         self.dependencies['tiled.exe'] = ['first.dll', 'second.dll']
         with self.assertRaises(RuntimeError) as result:

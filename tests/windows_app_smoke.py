@@ -9,6 +9,7 @@ import re
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -74,6 +75,14 @@ def window_for(pid):
     return found[0] if found else None
 
 
+def verify_chinese_log(log_path):
+    console = log_path.read_text(encoding='utf-8', errors='replace')
+    expected_catalogs = 'language=zh_CN app=1 qt=1'
+    expected_menu = 'Unity transfer menu UTF-8 hex: ' + '导入到 Unity…'.encode('utf-8').hex()
+    if expected_catalogs not in console or expected_menu not in {line.strip() for line in console.splitlines()}:
+        raise RuntimeError('Missing actual Chinese runtime evidence (catalogs and exact Unicode menu label)')
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--app', type=Path)
@@ -81,11 +90,39 @@ def main():
     p.add_argument('--results', type=Path, required=True)
     p.add_argument('--sample', type=Path)
     p.add_argument('--seconds', type=int, default=900)
+    p.add_argument('--detached-supervisor', action='store_true', help=argparse.SUPPRESS)
     a = p.parse_args()
     a.results = a.results.resolve()
     a.results.mkdir(parents=True, exist_ok=True)
     if os.name != 'nt':
         raise RuntimeError('Requires real Windows qwindows session')
+    if not a.detached_supervisor:
+        # Tiled attaches to its parent's console and reopens CONOUT$ there.
+        # A console-less Python supervisor makes normal inherited file handles
+        # observable without changing the shipped GUI or its logging behavior.
+        supervisor_log = a.results / ('supervisor-diagnostic.txt' if a.diagnostic else 'supervisor-production.txt')
+        with supervisor_log.open('w', encoding='utf-8') as log:
+            supervisor = subprocess.Popen(
+                [str(Path(sys.executable).resolve()), str(Path(__file__).resolve()),
+                 *sys.argv[1:], '--detached-supervisor'],
+                creationflags=subprocess.DETACHED_PROCESS, stdout=log, stderr=subprocess.STDOUT)
+            try:
+                code = supervisor.wait(timeout=(a.seconds + 300) if a.app else 240)
+                if code != 0:
+                    raise RuntimeError(f'Detached supervisor exited {code}; see {supervisor_log}')
+            finally:
+                if supervisor.poll() is None:
+                    # Timeout is failure. Clean up its GUI descendants, never kill to pass.
+                    try:
+                        for child in psutil.Process(supervisor.pid).children(recursive=True):
+                            try:
+                                child.kill()
+                            except psutil.NoSuchProcess:
+                                pass
+                    finally:
+                        supervisor.kill()
+                        supervisor.wait()
+        return
     env = isolated_environment(a.results)
     if a.diagnostic:
         app = a.diagnostic.resolve()
@@ -119,6 +156,7 @@ def main():
                 if not window:
                     raise RuntimeError('No visible real Windows map window appeared')
                 time.sleep(3)
+                verify_chinese_log(log_path)
                 captured = ImageGrab.grab(all_screens=True)
                 captured.save(a.results / 'production-app-desert.png')
                 loaded = modules(process.pid, app)
@@ -138,10 +176,7 @@ def main():
                 if process.poll() is None:
                     process.kill()
                     process.wait()
-        console = log_path.read_text(encoding='utf-8', errors='replace')
-        for expected in ('language=zh_CN app=1 qt=1', 'Unity transfer menu: 导入到 Unity'):
-            if expected not in console:
-                raise RuntimeError('Missing actual Chinese runtime evidence: ' + expected)
+        verify_chinese_log(log_path)
         (a.results / 'production-result.json').write_text(json.dumps({
             'hold_seconds': a.seconds, 'exit_code': code, 'window_title': window[1],
             'platform': 'windows', 'app': str(app), 'child_path': env['PATH'],

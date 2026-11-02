@@ -703,8 +703,13 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     connect(mUi->actionProjectProperties, &QAction::triggered, this, &MainWindow::projectProperties);
 
     connect(mUi->actionImportToUnity, &QAction::triggered, this, &MainWindow::importToUnity);
-    if (qEnvironmentVariableIsSet("TILED_WIDGET_ARTIFACTS"))
+    if (qEnvironmentVariableIsSet("TILED_WIDGET_ARTIFACTS")) {
         qInfo().noquote() << QStringLiteral("Unity transfer menu:") << mUi->actionImportToUnity->text();
+        // Qt's Windows stderr handler uses the local code page. Preserve the
+        // actual Unicode label in an ASCII-only diagnostic, independent of ACP.
+        qInfo().noquote() << QStringLiteral("Unity transfer menu UTF-8 hex:")
+                          << mUi->actionImportToUnity->text().toUtf8().toHex();
+    }
     connect(mUi->actionChineseGuide, &QAction::triggered, this, &MainWindow::openChineseGuide);
     connect(mUi->actionDocumentation, &QAction::triggered, this, &MainWindow::openDocumentation);
     connect(mUi->actionForum, &QAction::triggered, this, &MainWindow::openForum);
