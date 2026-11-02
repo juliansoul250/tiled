@@ -264,7 +264,7 @@ jobs:
           if-no-files-found: warn
 
   windows-package:
-    needs: [macos, windows]
+    # Build in parallel; delivery requires every job in this same-SHA workflow to succeed.
     runs-on: windows-2022
     timeout-minutes: 75
     steps:
