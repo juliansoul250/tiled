@@ -14,7 +14,7 @@
 
 ### 安装正确的 Mac 包
 
-1. 进入该分支的 **验证 macOS、Windows 与 Unity 地图导入** 工作流，核对提交编号，确认 **macOS 15、macOS 27、Windows 和 `macos-package` 全部通过**。本次中文化改变了源码和翻译，不能用旧英文版的通过记录替代。
+1. 进入该分支的 **验证 macOS、Windows 与 Unity 地图导入** 工作流，核对提交编号，确认 **macOS 15、macOS 27、Windows 和 `macos-package` 全部通过**。本次修复改变了 Qt Cocoa 辅助功能组件，不能用旧提交或未打补丁套件的通过记录替代。
 2. 下载附件 **`Tiled-macOS-Qt6.11.3-ad-hoc`**，解压得到应用 ZIP 和 SHA256 文件。此构建目标是 **Apple Silicon / arm64（M 系列芯片）**；Intel 兼容性 CI 使用 macOS 15 x64（须以对应提交的成功记录为准），但此附件不是 Intel 安装包，也不代表所有 Intel 设备均已验证。
 3. 在下载目录执行：
    ```sh
@@ -22,14 +22,14 @@
    ```
    把散列值与附带 `.sha256` 文件的第一段逐字比较。校验文件可能包含 CI 机器上的绝对路径，请不要直接照搬那个路径。
 4. 退出旧版、保留备份，再把新 `Tiled.app` 复制到目标“应用程序”文件夹。确保启动的是新副本，而不是旧 Dock 快捷方式或构建目录里的程序。
-5. 在 Tiled 应用菜单（或帮助菜单）的“关于 Tiled”中核对 Qt 运行版本与编译版本均为 **6.11.3**。Finder 中“显示包内容”后的 `Contents/Resources/fork-build.json` 记录提交编号、构建系统、架构、Qt 版本与临时签名状态。
+5. 在 Tiled 应用菜单（或帮助菜单）的“关于 Tiled”中核对 Qt 运行版本与编译版本均为 **6.11.3**。Finder 中“显示包内容”后的 `Contents/Resources/fork-build.json` 记录提交编号、构建系统、架构、Qt 版本与临时签名状态。还须确认其中 `qt_cocoa_fix.upstream_fix` 是 `8148c48deb8e4345bacb797cb75c011df6f797fa`，并存在同目录的 `qt-cocoa-fix.json`；仅看到版本 6.11.3 不足以判断已修复。
 6. 先用项目备份或示例进行打开、保存、关闭、重新打开，再继续正式工作。
 
 > **安全与签名：** 这是临时（ad-hoc）签名的应用 ZIP，**没有 Apple Developer ID 签名或公证，不是已公证安装器**。若系统阻止打开，请停止并保留提示；不要关闭或绕过 Gatekeeper、SIP、签名验证等保护。本流程不索取 Apple 账号或签名证书。
 
 ## Mac：从源码构建
 
-安装 Xcode / Command Line Tools、Qbs（可用 `brew install qbs`）和官方完整 **Qt 6.11.3 macOS 桌面套件**。需要 Widgets、QML、SVG、图像格式以及官方中文翻译资源；套件中必须有 `translations/qtbase_zh_CN.qm`。不要把不同版本的 Qt 框架、插件或部署工具混用。
+安装 Xcode / Command Line Tools、Qbs、CMake 和 Ninja（可用 `brew install qbs cmake ninja`）和官方完整 **Qt 6.11.3 macOS 桌面套件**。需要 Widgets、QML、SVG、图像格式以及官方中文翻译资源；套件中必须有 `translations/qtbase_zh_CN.qm`。不要把不同版本的 Qt 框架、插件或部署工具混用。
 
 ```sh
 git clone --branch fix/layer-stability-ui --single-branch \
@@ -42,6 +42,8 @@ bash dist/macos/build-fork-package.sh
 
 脚本只接受 Qt 6.11.3，使用同一个绝对套件路径下的 `qmake` 和 `macdeployqt`；每次建立新的临时构建和安装目录，生产构建不启用内部控件符号导出。它会：
 
+- 克隆完整官方套件到独立临时目录，核对官方 Qt 6.11.3 源码 SHA256，应用官方 QTBUG-149612 修复并用同套件私有头文件及框架重建 Cocoa 插件；原始套件保持不变；
+- 确认所有未改动 Qt 框架的字节散列不变，插件架构与原套件一致，写入补丁来源和二进制身份；
 - 部署 Qt 和插件，把调试符号单独保留，不混进运行插件目录；
 - 验证每个 Qt 框架的完整版本及 UUID、Cocoa 插件与套件的一致性；
 - 检查实际动态依赖必须存在，禁止外部开发机路径；相对搜索提示必须保持在应用包内；
@@ -54,6 +56,12 @@ bash dist/macos/build-fork-package.sh
 只做开发调试、不打便携包时，可使用：
 
 ```sh
+# 首次准备修复套件；应用会拒绝加载未修复的 Cocoa 插件。
+RESULT=$(mktemp)
+TILED_FIXED_KIT_RESULT="$RESULT" bash dist/macos/prepare-fixed-qt.sh
+export QT_ROOT_DIR="$(cat "$RESULT")"
+export QT_PLUGIN_PATH="$QT_ROOT_DIR/plugins"
+export QML2_IMPORT_PATH="$QT_ROOT_DIR/qml"
 qbs setup-toolchains --detect
 qbs setup-qt "$QT_ROOT_DIR/bin/qmake" tiled-qt
 qbs config profiles.tiled-qt.baseProfile xcode
@@ -112,3 +120,9 @@ GitHub 官方公告 macOS 14 托管镜像将于 2026 年 11 月 2 日退役，�
 参考：[GitHub 官方 macOS 14 镜像退役公告](https://github.blog/changelog/2026-10-01-github-actions-macos-14-runner-image-retirement/)。
 
 2026-11-02：标准 `macos-15` 在同一提交的首次及重试作业中均未分配运行器，未执行测试；兼容性作业改为官方标准免费 `macos-15-intel`（macOS 15 x64）。Qt 6.11.3 `clang_64` 工具包、全部测试与断言保持不变，`xcode-27` 的 arm64 主目标和 15 分钟验证不变。交付仍要求同一提交的全部五项作业成功，不能将排队或取消计为通过。此变更不增加 Intel 成品包。
+
+## Qt Cocoa 辅助功能修复记录
+
+采用 Qt 官方 [QTBUG-149612 修复](https://github.com/qt/qtbase/commit/8148c48deb8e4345bacb797cb75c011df6f797fa)，完整回移 Cocoa 原生元素生命周期两文件修改。辅助功能接口由 Qt 缓存和控件管理，原生元素失效或销毁时不再误删仍被使用的接口。不会禁用辅助功能，也不要求修改系统权限。新增测试覆盖删除模型行后读取已选子项，以及首次查询已选子项的顺序。原有玻璃材质、中文、Unity 和保存重开验证保留。
+
+这是在同一官方 6.11.3 套件中重建修改过的 Cocoa 插件，然后重新构建、审核和分发完整应用；不是让使用者向旧应用手动替换动态库。源码补丁与构建说明见 `dist/macos/qt-cocoa-fix/`。继承的上游通用打包工作流在本 fork 中不再生成旧 Qt 的 Mac 包，Mac 成品以本分支完整验证工作流为准。

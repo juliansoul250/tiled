@@ -41,6 +41,10 @@ jobs:
           version: ${{ matrix.qt }}
           arch: clang_64
           cache: true
+      - name: Rebuild accepted Cocoa accessibility fix in a complete matching Qt kit
+        run: |
+          brew install cmake ninja
+          bash dist/macos/prepare-fixed-qt.sh
       - name: Install and configure Qbs
         run: |
           brew install qbs
@@ -241,6 +245,10 @@ jobs:
           arch: clang_64
           modules: qtimageformats
           cache: true
+      - name: Rebuild accepted Cocoa accessibility fix in a complete matching Qt kit
+        run: |
+          brew install cmake ninja
+          bash dist/macos/prepare-fixed-qt.sh
       - name: Install Qbs
         run: |
           brew install qbs

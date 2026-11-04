@@ -53,6 +53,8 @@ with log_path.open('w') as log:
             time.sleep(0.5)
         else:
             raise RuntimeError('No initialized native dock state in production app log')
+        if 'Cocoa accessibility fix: 6.11.3:QTBUG-149612:8148c48deb8e4345bacb797cb75c011df6f797fa' not in log_path.read_text():
+            raise RuntimeError('Actual loaded Cocoa plugin did not report the accepted accessibility fix')
         if os.environ.get('TILED_EXPECT_CHINESE') == '1':
             text = log_path.read_text()
             if 'Localization: language=zh_CN app=1 qt=1 file-menu=文件' not in text:

@@ -62,6 +62,9 @@
 #endif // Q_OS_WIN
 
 using namespace Tiled;
+#ifdef Q_OS_MAC
+bool verifyCocoaAccessibilityFix();
+#endif
 
 static QTextStream& stdOut()
 {
@@ -454,6 +457,10 @@ int main(int argc, char *argv[])
     Tiled::increaseImageAllocationLimit();
 
     TiledApplication a(argc, argv);
+#ifdef Q_OS_MAC
+    if (!verifyCocoaAccessibilityFix())
+        return 1;
+#endif
 
 #ifdef TILED_SENTRY
     Sentry sentry;

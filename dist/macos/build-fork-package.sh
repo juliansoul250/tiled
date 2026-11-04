@@ -4,6 +4,14 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 : "${QT_ROOT_DIR:?Set QT_ROOT_DIR to the absolute Qt 6.11.3 desktop kit}"
 QT_ROOT_DIR=$(cd "$QT_ROOT_DIR" && pwd)
+if [[ ! -f "$QT_ROOT_DIR/tiled-cocoa-fix.json" ]]; then
+    RESULT=$(mktemp "${TMPDIR:-/tmp}/tiled-fixed-kit-result.XXXXXXXX")
+    TILED_FIXED_KIT_RESULT="$RESULT" bash "$ROOT/dist/macos/prepare-fixed-qt.sh"
+    QT_ROOT_DIR=$(cat "$RESULT")
+    export QT_ROOT_DIR
+    export QT_PLUGIN_PATH="$QT_ROOT_DIR/plugins"
+    export QML2_IMPORT_PATH="$QT_ROOT_DIR/qml"
+fi
 QMAKE="$QT_ROOT_DIR/bin/qmake"
 DEPLOY="$QT_ROOT_DIR/bin/macdeployqt"
 [[ $("$QMAKE" -query QT_VERSION) == 6.11.3 ]] || { echo '必须使用完整的 Qt 6.11.3 套件' >&2; exit 1; }

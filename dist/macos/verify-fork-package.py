@@ -66,6 +66,27 @@ plugin = app / 'Contents/PlugIns/platforms/libqcocoa.dylib'
 require(plugin.is_file(), 'Missing Cocoa platform plugin')
 require((kit / 'plugins/platforms/libqcocoa.dylib').is_file(), 'Validation requirement failed')
 cocoa_uuids = same_kit(plugin, kit / 'plugins/platforms/libqcocoa.dylib')
+patch_manifest = kit / 'tiled-cocoa-fix.json'
+require(patch_manifest.is_file(), 'Qt kit lacks the required Cocoa accessibility source-fix record')
+cocoa_fix = json.loads(patch_manifest.read_text())
+require(cocoa_fix.get('qt_version') == expected
+        and cocoa_fix.get('upstream_fix') == '8148c48deb8e4345bacb797cb75c011df6f797fa'
+        and cocoa_fix.get('source_sha256') == '46de0710b594945a5d446ae44354daa386141c6903c53781b2ca547bc62f8f8f'
+        and cocoa_fix.get('patch_sha256') == 'e0f0ddcb7deff7e01094814880ec3835bd4e63012d16af50bc81e39e7cad92ea',
+        'Qt Cocoa source fix identity differs from the reviewed backport')
+require(cocoa_fix.get('patched_plugin_sha256') == hashlib.sha256((kit / 'plugins/platforms/libqcocoa.dylib').read_bytes()).hexdigest(),
+        'Selected kit Cocoa plugin changed after the recorded source build')
+expected_frameworks = {str((p / 'Versions/A' / p.stem).relative_to(kit))
+                       for p in (kit / 'lib').glob('Qt*.framework')}
+require(expected_frameworks and set(cocoa_fix.get('framework_sha256', {})) == expected_frameworks,
+        'Incomplete unchanged-framework record in fixed Qt kit')
+for relative, expected_hash in cocoa_fix['framework_sha256'].items():
+    original_framework = (kit / relative).resolve()
+    require(original_framework.is_relative_to(kit) and original_framework.is_file(), 'Invalid Qt framework record')
+    require(hashlib.sha256(original_framework.read_bytes()).hexdigest() == expected_hash,
+            'A framework changed while preparing the matching Qt Cocoa fix')
+(app / 'Contents/Resources/qt-cocoa-fix.json').write_text(json.dumps(cocoa_fix, indent=2) + '\n')
+
 checked = []
 audit_errors = []
 for binary in app.rglob('*'):
@@ -120,7 +141,7 @@ for binary in app.rglob('*'):
     except Exception as error:
         audit_errors.append(f"{binary}: {type(error).__name__}: {error}")
 require(not audit_errors, 'Deployed library audit failed:\n' + '\n'.join(audit_errors))
-identity = {'source_commit': run('git', '-C', str(source), 'rev-parse', 'HEAD'), 'source_dirty': bool(run('git', '-C', str(source), 'status', '--porcelain', '--untracked-files=no')), 'qt_version': expected, 'ui_language': 'zh_CN', 'unity_importer_commit': unity_record['commit'], 'qt_chinese_catalog_sha256': hashlib.sha256(qt_catalog.read_bytes()).hexdigest(), 'qt_kit': str(kit), 'cocoa_plugin_uuids': cocoa_uuids, 'qmake': str(kit / 'bin/qmake'), 'macdeployqt': str(kit / 'bin/macdeployqt'), 'built_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'macos': run('sw_vers'), 'architecture': run('uname', '-m'), 'signing': 'ad-hoc; NOT Developer ID signed or notarized', 'qt_frameworks': sorted((p.name for p in frameworks)), 'audited_macho_files': checked}
+identity = {'source_commit': run('git', '-C', str(source), 'rev-parse', 'HEAD'), 'source_dirty': bool(run('git', '-C', str(source), 'status', '--porcelain', '--untracked-files=no')), 'qt_version': expected, 'qt_cocoa_fix': cocoa_fix, 'ui_language': 'zh_CN', 'unity_importer_commit': unity_record['commit'], 'qt_chinese_catalog_sha256': hashlib.sha256(qt_catalog.read_bytes()).hexdigest(), 'qt_kit': str(kit), 'cocoa_plugin_uuids': cocoa_uuids, 'qmake': str(kit / 'bin/qmake'), 'macdeployqt': str(kit / 'bin/macdeployqt'), 'built_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'macos': run('sw_vers'), 'architecture': run('uname', '-m'), 'signing': 'ad-hoc; NOT Developer ID signed or notarized', 'qt_frameworks': sorted((p.name for p in frameworks)), 'audited_macho_files': checked}
 (app / 'Contents/Resources/fork-build.json').write_text(json.dumps(identity, indent=2) + '\n')
 plist_path = app / 'Contents/Info.plist'
 plist = plistlib.loads(plist_path.read_bytes())

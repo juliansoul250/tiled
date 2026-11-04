@@ -20,6 +20,8 @@ on:
 
 jobs:
   build:
+    # This fork distributes only the audited patched kit from layer-ui-validation.
+    if: github.repository != 'juliansoul250/tiled'
 
     runs-on: macos-latest
 

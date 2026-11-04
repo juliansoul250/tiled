@@ -13,7 +13,7 @@ from unittest.mock import patch
 SCRIPT = pathlib.Path(__file__).resolve().parents[1] / 'dist/macos/verify-fork-package.py'
 
 class PackageAudit(unittest.TestCase):
-    def audit(self, *, version='6.11.3', dependency=None, uuid_mismatch=False, bad_header=False, empty_output=False, install_id=None, chinese_error=None, unity_error=None, rpath='@executable_path/../Frameworks'):
+    def audit(self, *, version='6.11.3', dependency=None, uuid_mismatch=False, bad_header=False, empty_output=False, install_id=None, chinese_error=None, unity_error=None, cocoa_error=None, rpath='@executable_path/../Frameworks'):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             app, kit, source = (root / x for x in ('Tiled.app', 'qt', 'source'))
@@ -58,6 +58,20 @@ class PackageAudit(unittest.TestCase):
                       app / 'Contents/PlugIns/platforms/libqcocoa.dylib',
                       kit / 'plugins/platforms/libqcocoa.dylib'):
                 p.write_bytes(b'MACHO')
+            kit_framework = kit / 'lib/QtCore.framework/Versions/A/QtCore'
+            kit_framework.parent.mkdir(parents=True)
+            kit_framework.write_bytes(b'MACHO')
+            fix = {'qt_version': '6.11.3',
+                   'upstream_fix': '8148c48deb8e4345bacb797cb75c011df6f797fa',
+                   'source_sha256': '46de0710b594945a5d446ae44354daa386141c6903c53781b2ca547bc62f8f8f',
+                   'patch_sha256': 'e0f0ddcb7deff7e01094814880ec3835bd4e63012d16af50bc81e39e7cad92ea',
+                   'patched_plugin_sha256': hashlib.sha256(b'MACHO').hexdigest(),
+                   'framework_sha256': {'lib/QtCore.framework/Versions/A/QtCore': hashlib.sha256(b'MACHO').hexdigest()}}
+            if cocoa_error == 'incomplete-frameworks': fix['framework_sha256'] = {}
+            if cocoa_error == 'wrong-fix': fix['upstream_fix'] = 'unreviewed'
+            if cocoa_error != 'missing': (kit / 'tiled-cocoa-fix.json').write_text(json.dumps(fix))
+            if cocoa_error == 'changed-plugin': (kit / 'plugins/platforms/libqcocoa.dylib').write_bytes(b'other-plugin')
+            if cocoa_error == 'changed-framework': kit_framework.write_bytes(b'other-framework')
             def command(args, **kwargs):
                 tool = pathlib.Path(args[0]).name
                 if tool == 'qmake': return str(kit / 'translations') if args[-1] == 'QT_INSTALL_TRANSLATIONS' else '6.11.3\n'
@@ -86,6 +100,16 @@ class PackageAudit(unittest.TestCase):
             self.assertTrue((app / 'Contents/Resources/fork-build.json').is_file())
 
     def test_universal_headers_and_qt_version_fields(self): self.audit()
+    def test_missing_cocoa_fix_record_rejected(self):
+        with self.assertRaises(RuntimeError): self.audit(cocoa_error='missing')
+    def test_wrong_cocoa_fix_record_rejected(self):
+        with self.assertRaises(RuntimeError): self.audit(cocoa_error='wrong-fix')
+    def test_changed_kit_plugin_rejected(self):
+        with self.assertRaises(RuntimeError): self.audit(cocoa_error='changed-plugin')
+    def test_incomplete_framework_record_rejected(self):
+        with self.assertRaises(RuntimeError): self.audit(cocoa_error='incomplete-frameworks')
+    def test_changed_framework_rejected(self):
+        with self.assertRaises(RuntimeError): self.audit(cocoa_error='changed-framework')
     def test_unexpected_otool_output_rejected(self):
         with self.assertRaises(RuntimeError): self.audit(bad_header=True)
     def test_empty_otool_output_rejected(self):

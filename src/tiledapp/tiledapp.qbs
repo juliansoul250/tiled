@@ -39,6 +39,11 @@ TiledQtGuiApplication {
         "main.cpp",
     ]
 
+    Group {
+        condition: qbs.targetOS.contains("macos")
+        files: ["cocoaruntime.mm"]
+    }
+
     Properties {
         condition: qbs.targetOS.contains("macos")
         cpp.frameworks: ["Foundation"]

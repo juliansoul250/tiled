@@ -81,6 +81,7 @@ QStringList queryNativeAXSelectedTitles(QWidget *window)
 {
     QStringList selected;
     @autoreleasepool {
+        QAccessible::setActive(true);
         query(window, &selected);
     }
     return selected;
