@@ -6,9 +6,15 @@ ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 ORIGINAL=$(cd "$QT_ROOT_DIR" && pwd)
 [[ $("$ORIGINAL/bin/qmake" -query QT_VERSION) == 6.11.3 ]]
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/tiled-fixed-qt.XXXXXXXX")
+WORK=$(cd "$WORK" && pwd -P)
 KIT="$WORK/kit"
 ditto "$ORIGINAL" "$KIT"
+# Installer-patched absolute paths and /var -> /private/var aliases must not
+# silently point at the source kit. qt.conf is Qt's supported relocation API.
+echo "Copied qmake prefix before relocation: $("$KIT/bin/qmake" -query QT_INSTALL_PREFIX)"
+printf '[Paths]\nPrefix=%s\n' "$KIT" > "$KIT/bin/qt6.conf"
 [[ $("$KIT/bin/qmake" -query QT_INSTALL_PREFIX) == "$KIT" ]] || { echo 'Copied Qt kit did not relocate' >&2; exit 1; }
+[[ $("$KIT/bin/qmake" -query QT_INSTALL_LIBS) == "$KIT/lib" ]] || { echo 'Copied Qt libraries did not relocate' >&2; exit 1; }
 URL=https://download.qt.io/official_releases/qt/6.11/6.11.3/submodules/qtbase-everywhere-src-6.11.3.tar.xz
 curl --fail --location --retry 2 "$URL" -o "$WORK/qtbase.tar.xz"
 echo "46de0710b594945a5d446ae44354daa386141c6903c53781b2ca547bc62f8f8f  $WORK/qtbase.tar.xz" | shasum -a 256 -c -
