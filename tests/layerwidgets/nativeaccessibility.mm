@@ -8,7 +8,7 @@
 #import <AppKit/AppKit.h>
 
 namespace {
-void visit(id node, NativeAXCounts &counts, std::set<void *> &seen, int depth)
+void visit(id node, NativeAXCounts &counts, std::set<void *> &seen, int depth, QStringList *selected = nullptr)
 {
     if (!node || depth > 24 || seen.size() > 4000
             || !seen.insert(reinterpret_cast<void *>(node)).second)
@@ -18,6 +18,15 @@ void visit(id node, NativeAXCounts &counts, std::set<void *> &seen, int depth)
         if ([role isEqualToString:NSAccessibilityOutlineRole]
                 || [role isEqualToString:NSAccessibilityTableRole]) {
             ++counts.tables;
+            if (selected) {
+                // Ask before enumerating fresh rows/cells: rebuilding those
+                // first can hide a stale selection cache after a model change.
+                for (id cell in [node accessibilitySelectedChildren]) {
+                    NSString *title = [cell accessibilityTitle];
+                    selected->append(title ? QString::fromNSString(title) : QString());
+                }
+                return;
+            }
             // These queries populate Qt Cocoa's native row/column/cell cache;
             // Qt's generic QAccessibleInterface alone does not exercise it.
             NSArray *rows = [node accessibilityRows];
@@ -35,10 +44,10 @@ void visit(id node, NativeAXCounts &counts, std::set<void *> &seen, int depth)
     }
     if ([node respondsToSelector:@selector(accessibilityChildren)])
         for (id child in [node accessibilityChildren])
-            visit(child, counts, seen, depth + 1);
+            visit(child, counts, seen, depth + 1, selected);
 }
 
-NativeAXCounts query(QWidget *window)
+NativeAXCounts query(QWidget *window, QStringList *selected = nullptr)
 {
     NativeAXCounts counts;
     std::set<void *> seen;
@@ -47,7 +56,7 @@ NativeAXCounts query(QWidget *window)
     // external AX client, trusted-process setting or security prompt is needed.
     NSArray *children = [native accessibilityAttributeValue:NSAccessibilityChildrenAttribute];
     for (id child in children)
-        visit(child, counts, seen, 0);
+        visit(child, counts, seen, 0, selected);
     return counts;
 }
 }
@@ -66,4 +75,13 @@ NativeAXCounts queryNativeAXThenMutate(QWidget *window, const std::function<void
         query(window);
     } // Exercise the array/element destruction path in the supplied crash.
     return before;
+}
+
+QStringList queryNativeAXSelectedTitles(QWidget *window)
+{
+    QStringList selected;
+    @autoreleasepool {
+        query(window, &selected);
+    }
+    return selected;
 }

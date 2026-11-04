@@ -28,6 +28,7 @@
 #include <QScreen>
 #include <QStandardItemModel>
 #include <QTreeView>
+#include <QTableView>
 #include <QMenu>
 #include <QPointer>
 #include <QScopeGuard>
@@ -56,6 +57,8 @@ private slots:
     void nativeMaterialAndOpaqueFallback();
     void nativeAccessibilityCacheLifecycle_data();
     void nativeAccessibilityCacheLifecycle();
+    void nativeAccessibilitySelectionAfterRowRemoval();
+    void nativeAccessibilitySelectionBeforeTraversal();
 };
 
 static std::unique_ptr<Map> makeMap()
@@ -597,6 +600,63 @@ void test_LayerWidgets::exerciseNativeAccessibility(bool glass)
     }
     table->setModel(nullptr);
     QVERIFY(window.close());
+}
+
+// A client can ask selection first without walking rows/columns beforehand.
+void test_LayerWidgets::nativeAccessibilitySelectionBeforeTraversal()
+{
+    for (int cycle = 0; cycle < 40; ++cycle) {
+        QMainWindow window;
+        auto view = new QTableView(&window);
+        QStandardItemModel model(3, 2);
+        model.setData(model.index(0, 0), QStringLiteral("Selected A"));
+        model.setData(model.index(0, 1), QStringLiteral("Selected B"));
+        view->setModel(&model);
+        const auto detach = qScopeGuard([&] { view->setModel(nullptr); });
+        view->setSelectionBehavior(QAbstractItemView::SelectRows);
+        window.setCentralWidget(view);
+        window.resize(600, 400);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        view->selectRow(0);
+        QCoreApplication::processEvents();
+        const QStringList expected{QStringLiteral("Selected A"), QStringLiteral("Selected B")};
+        QCOMPARE(queryNativeAXSelectedTitles(&window), expected);
+        qInfo() << "Native AX selection before row traversal" << cycle;
+    }
+}
+
+// QTBUG-149612: native row teardown must not destroy the item view's
+// surviving selected-cell interface. Re-query through normal public AX APIs.
+void test_LayerWidgets::nativeAccessibilitySelectionAfterRowRemoval()
+{
+    QMainWindow window;
+    auto view = new QTableView(&window);
+    QStandardItemModel model(3, 1);
+    model.setData(model.index(0, 0), QStringLiteral("Keep selected"));
+    model.setData(model.index(1, 0), QStringLiteral("Second row"));
+    model.setData(model.index(2, 0), QStringLiteral("Remove this row"));
+    view->setModel(&model);
+    const auto detach = qScopeGuard([&] { view->setModel(nullptr); });
+    view->setSelectionBehavior(QAbstractItemView::SelectRows);
+    window.setCentralWidget(view);
+    window.resize(600, 400);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    for (int cycle = 0; cycle < 100; ++cycle) {
+        model.setRowCount(3);
+        model.setData(model.index(0, 0), QStringLiteral("Keep selected"));
+        view->selectRow(0);
+        QCoreApplication::processEvents();
+        const auto counts = queryNativeAXThenMutate(&window, [] {});
+        QVERIFY(counts.tables > 0 && counts.cells > 0);
+        QCOMPARE(queryNativeAXSelectedTitles(&window), QStringList{QStringLiteral("Keep selected")});
+        queryNativeAXThenMutate(&window, [&] { model.setRowCount(2); });
+        // The preceding helper drained native autoreleases. Do not populate
+        // rows again before checking the still-valid selected row.
+        QCOMPARE(queryNativeAXSelectedTitles(&window), QStringList{QStringLiteral("Keep selected")});
+        qInfo() << "Native AX retained selection after row removal" << cycle;
+    }
 }
 
 QTEST_MAIN(test_LayerWidgets)
